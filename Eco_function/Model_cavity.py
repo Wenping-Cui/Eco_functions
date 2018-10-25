@@ -25,6 +25,7 @@ class Cavity_simulation(object):
 		self.sample_size=parameters['sample_size']
 		self.Metabolic_Tradeoff=False
 		self.binary_c=False
+		self.gamma_c=False
 		self.p_c=0.2
 		self.epsilon=10**(-3)
 	def initialize_random_variable(self,):
@@ -42,8 +43,6 @@ class Cavity_simulation(object):
 		# Build Species Pool
 		##################################
 		self.growth=np.ones(self.S)
-		if self.binary_c:
-			self.C = np.random.binomial(1, self.p_c, [self.S,self.M])
 		if self.gamma_flag=='S/M':
 			self.C=np.random.normal(self.mu/self.M, self.sigma_c/np.sqrt(self.M), [self.S,self.M])
 		if self.gamma_flag=='M/S':
@@ -52,6 +51,14 @@ class Cavity_simulation(object):
 			self.costs=np.sum(self.C, axis=1)+self.epsilon*np.random.normal(0, 1, self.S)
 		else:
 			self.costs=np.random.normal(self.cost, self.sigma_m, self.S)		#Ode solver parameter
+		if self.binary_c:
+			self.C = np.random.binomial(1, self.p_c, [self.S,self.M])+0.01*np.random.normal(0, 1,[self.S,self.M])
+		if self.gamma_c:
+		    #shape, sscale = 2., 2.  # mean=4, std=2*sqrt(2)
+			self.C= np.random.gamma(self.shape, self.scale, [self.S,self.M])
+
+		#shape, scale = 2., 2.  # mean=4, std=2*sqrt(2)
+		#self.C= np.random.gamma(shape, scale, [self.S,self.M])
 		self.t0 = 0;
 		self.t1 = self.parameters['t1'];
 		self.Nt = self.parameters['Nt']
