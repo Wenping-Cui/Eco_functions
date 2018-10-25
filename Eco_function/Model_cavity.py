@@ -9,6 +9,8 @@ from Eco_function.eco_func import *
 from scipy.integrate import odeint
 from scipy.integrate import quad
 import random as rand
+from cvxopt import matrix
+from cvxopt import solvers
 class Cavity_simulation(object):
 	def __init__(self, parameters):
 		self.parameters=parameters
@@ -21,7 +23,6 @@ class Cavity_simulation(object):
 		self.cost=parameters['m']
 		self.sigma_m=parameters['sigma_m']
 		self.sample_size=parameters['sample_size']
-		self.loop_size=parameters['loop_size']
 		self.Metabolic_Tradeoff=False
 		self.binary_c=False
 		self.p_c=0.2
@@ -77,6 +78,7 @@ class Cavity_simulation(object):
 		N_survive_list=[];
 		Opti_f=[]
 		Growth=[]
+		self.sev = np.array([])
 		for step in range(self.sample_size):	
 			if Initial=='Auto':
 				self.sim_pars=self.initialize_random_variable()
@@ -116,8 +118,25 @@ class Cavity_simulation(object):
 			qR_list_bar.append(np.mean(R**2))
 			qN_list_bar.append(np.mean(N**2))
 			power.append(Model_costs_power)
-			N=N[np.where(N > 0)]
+			C=self.C;
+			C=np.delete(C, np.where(R==0),axis=1)
+			C=np.delete(C, np.where(N==0),axis=0)
+			R=R[np.where(R>0)]
+			N=N[np.where(N>0)]
 			N_survive_list.extend(N)
+			S=len(N);
+			M=len(R);
+			if Dynamics=='linear':
+				JR=np.concatenate((-np.diag(np.einsum('i,ij', N, C))-np.diag(R),-np.dot(np.diag(R), C.T)), axis=1);
+				JN=np.concatenate((np.dot(np.diag(N), C),np.zeros([ S, S])), axis=1);
+				J_all=np.concatenate((JR, JN), axis=0);
+				ev,_ = np.linalg.eig(J_all)
+			if Dynamics=='quadratic':
+				JR=np.concatenate((-np.diag(R),-np.dot(np.diag(R),C.T)), axis=1);
+				JN=np.concatenate((np.dot(np.diag(N),C),np.zeros([S, S])), axis=1);
+				J_all=np.concatenate((JR, JN), axis=0);
+				ev,_ = np.linalg.eig(J_all)
+			self.sev = np.append(self.sev, ev)
 		self.mean_R, self.var_R=np.mean(R_list), np.var(R_list)
 		self.mean_N, self.var_N=np.mean(N_list), np.var(N_list)
 		self.Survive=np.mean(Survive_list)
@@ -173,59 +192,8 @@ class Cavity_simulation(object):
 			return f
 		else:
 			return self.mean_var_simulation
-	def cavity_solution(self,):
-		gamma = self.M/self.S;
-		var_K=self.sigma_K**2
-		var_c=self.sigma_c**2
-		var_m=self.sigma_m**2
-
-		mean_N=self.mean_var_simulation['mean_N'];
-		mean_R=self.mean_var_simulation['mean_R'];
-		var_N = self.mean_var_simulation['var_N'];
-		var_R = self.mean_var_simulation['var_R'];
-		chi=np.random.randn()
-		for l in range(1, self.loop_size):
-			var_N_old =var_N 
-
-			q_R = var_R+mean_R**2
-
-			sigma_z = np.sqrt(gamma*var_c*q_R+var_m)
-
-			mean_R=self.K/(1.+gamma*self.mu*mean_N)
-
-
-			d=(gamma*self.mu*mean_R-self.cost)/sigma_z
-
-			phi_N=self.ifunc(0, d)
-
-			nu= - phi_N/(gamma*var_c*chi)
-
-			chi=self.K/(1.+self.mu*mean_N)**2+3*nu*var_c*self.K**2/(8*(1.+self.mu*mean_N)**4)
-
-
-			mean_N=sigma_z*self.K/(gamma*var_c*(mean_R**2+var_R))*self.ifunc(1, d)
-
-			var_N=(sigma_z*self.K/(gamma*var_c*(mean_R**2+var_R)))**2*self.ifunc(2, d)-mean_N**2
-
-
-			#var_R =mean_R**2/self.K**2*var_K+mean_R**4/self.K**2*(self.mu**2*var_N+mean_N**2*var_c)
-			var_R =1/(1.+self.mu*mean_N)**2*var_K+nu*var_c/(4*(1.+self.mu*mean_N)**3)*var_K**2
-
-
-			err = np.abs(var_N - var_N_old)
-		print ('error is', err, var_N, var_N_old )
-		self.mean_var_cavity={};
-		self.mean_var_cavity['mean_R']=mean_R
-		self.mean_var_cavity['mean_N']=mean_N
-		self.mean_var_cavity['q_R']=var_R+mean_R**2
-		self.mean_var_cavity['q_N']=var_R+mean_N**2
-		self.mean_var_cavity['var_R']=var_R
-		self.mean_var_cavity['var_N']=var_N
-		self.mean_var_cavity['Survive']=phi_N*self.Survive
-		return self.mean_var_cavity
+	
 	def Quadratic_programming(self, Initial='Auto'):
-		from cvxopt import matrix
-		from cvxopt import solvers
 		if Initial=='Auto':
 			self.sim_pars=self.initialize_random_variable()
 		if Initial=='Manually':
