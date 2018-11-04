@@ -11,6 +11,7 @@ from scipy.integrate import quad
 import random as rand
 from cvxopt import matrix
 from cvxopt import solvers
+import cvxpy as cvx
 class Cavity_simulation(object):
 	def __init__(self, parameters):
 		self.parameters=parameters
@@ -113,13 +114,22 @@ class Cavity_simulation(object):
 				R, N=Model.R_f, Model.N_f;
 				Model_survive=Model.survive;
 				Model_costs_power=Model.costs_power
-			if Simulation_type=='QP':
+			if Simulation_type=='QP' and  Dynamics=='quadratic':
 				R, N=self.Quadratic_programming(self,)
 				R[np.where(R < 10 ** -6)] = 0
 				N[np.where(N < 10 ** -6)] = 0
 				Model_costs_power=N.dot(self.costs)
 				Model_survive=np.count_nonzero(N)
-			Opti_f.append((np.linalg.norm(self.Ks-R))**2/self.M)
+			if Simulation_type=='CVXOPT' and Dynamics=='linear':
+				assert  np.count_nonzero(self.Ks) ==self.M, "K should be non-zero elements"
+				R, N,opt_v=self.CVXOPT_programming(self,)
+				R[np.where(R < 10 ** -6)] = 0
+				N[np.where(N < 10 ** -6)] = 0
+				Model_costs_power=N.dot(self.costs)
+				Model_survive=np.count_nonzero(N)
+				Opti_f.append(opt_v)
+			if Dynamics=='quadratic':	
+				Opti_f.append((np.linalg.norm(self.Ks-R))**2/self.M)
 			Growth.extend(np.dot(self.C,R)-self.costs)
 			Survive_list.append(Model_survive)
 			phi_R_list.append(np.count_nonzero(R)/float(self.M));
@@ -240,6 +250,41 @@ class Cavity_simulation(object):
 		Na=np.array(sol['z']).reshape(self.M+self.S,)
 		N=Na[0:self.S]
 		return R, N
+
+
+	def CVXOPT_programming(self, Initial='Auto'):
+		if Initial=='Auto':
+			self.sim_pars=self.initialize_random_variable()
+		if Initial=='Manually':
+			self.sim_pars = [self.flag_crossfeeding, self.M, self.S, self.R_ini, self.N_ini,self.T_par, self.C, self.energies, self.tau_inv, self.costs, self.growth, self.Ks] 	
+		# Define QP parameters (directly)
+		M = np.identity(self.M)
+		P = np.dot(M.T, M)
+		q = -np.dot(self.Ks,M).reshape((self.M,))
+		G1= self.C
+		h1= self.costs
+
+		G2= -np.identity(self.M)
+		h2= np.zeros(self.M)
+		G=np.concatenate((G1, G2), axis=0)
+		h=np.concatenate((h1, h2), axis=None)
+
+		R = cvx.Variable(shape=(self.M,1))
+		K = self.Ks.reshape((self.M,1))
+		h=h.reshape((self.M+self.S,1))
+
+		# Construct the QP, invoke solver
+		obj = cvx.Minimize(cvx.sum(cvx.kl_div(K, R)))
+		constraints = [G*R <= h ]
+		prob = cvx.Problem(obj, constraints)
+		prob.solver_stats
+		prob.solve(solver=cvx.ECOS,abstol=1e-8,reltol=1e-8,warm_start=True)
+		# Extract optimal value and solution
+		N=constraints[0].dual_value[0:self.S]
+		R=R.value
+		R=R.reshape(self.M);
+		N=N.reshape(self.S);
+		return R, N, prob.value
 	def ifunc(self,j, d):
 		def integrand(z, j, d):
 			return np.exp(-z**2/2)*(z+d)**j 
