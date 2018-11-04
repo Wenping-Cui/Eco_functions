@@ -121,7 +121,7 @@ class Cavity_simulation(object):
 				Model_costs_power=N.dot(self.costs)
 				Model_survive=np.count_nonzero(N)
 			if Simulation_type=='CVXOPT' and Dynamics=='linear':
-				assert  np.count_nonzero(self.Ks) ==self.M, "K should be non-zero elements"
+				assert  (self.Ks>0).sum() ==self.M, "K should be positive elements"
 				R, N,opt_v=self.CVXOPT_programming(self,)
 				R[np.where(R < 10 ** -6)] = 0
 				N[np.where(N < 10 ** -6)] = 0
@@ -275,12 +275,12 @@ class Cavity_simulation(object):
 
 		# Construct the QP, invoke solver
 		obj = cvx.Minimize(cvx.sum(cvx.kl_div(K, R)))
-		constraints = [G*R <= h ]
+		constraints =[G*R <= h]
 		prob = cvx.Problem(obj, constraints)
 		prob.solver_stats
 		prob.solve(solver=cvx.ECOS,abstol=1e-8,reltol=1e-8,warm_start=True)
 		# Extract optimal value and solution
-		N=constraints[0].dual_value[0:self.S]
+		N=(constraints[0].dual_value)[0:self.S]
 		R=R.value
 		R=R.reshape(self.M);
 		N=N.reshape(self.S);
