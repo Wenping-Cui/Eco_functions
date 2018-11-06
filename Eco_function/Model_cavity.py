@@ -121,7 +121,7 @@ class Cavity_simulation(object):
 				Model_costs_power=N.dot(self.costs)
 				Model_survive=np.count_nonzero(N)
 			if Simulation_type=='CVXOPT' and Dynamics=='linear':
-				assert  (self.Ks>0).sum() ==self.M, "K should be positive elements"
+				self.Ks[np.where(self.Ks<0)]=0;
 				R, N,opt_v=self.CVXOPT_programming(self,)
 				R[np.where(R < 10 ** -6)] = 0
 				N[np.where(N < 10 ** -6)] = 0
