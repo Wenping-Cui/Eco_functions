@@ -162,6 +162,7 @@ class Cavity_simulation(object):
 				J_all=np.concatenate((JR, JN), axis=0);
 				ev,_ = np.linalg.eig(J_all)
 				A=np.concatenate((np.concatenate((C, np.eye(M))),np.concatenate((np.zeros([S,S]), C.T))),axis=1);
+				if np.linalg.det(A)==0: continue;
 				Chi_R, Nu_N=self.linear_response_q(A, S, M)
 				chi=np.trace(Chi_R)/self.M
 				nu=np.trace(Nu_N)/self.S
