@@ -92,6 +92,8 @@ class Cavity_simulation(object):
 		N_survive_list=[];
 		Opti_f=[]
 		Growth=[]
+		Chi_array=[];
+		Nu_array=[];
 		self.sev = np.array([])
 		for step in range(self.sample_size):	
 			if Initial=='Auto':
@@ -121,7 +123,7 @@ class Cavity_simulation(object):
 				Model_costs_power=N.dot(self.costs)
 				Model_survive=np.count_nonzero(N)
 			if Simulation_type=='CVXOPT' and Dynamics=='linear':
-				assert  (self.Ks>0).sum() ==self.M, "K should be positive elements"
+				self.Ks[np.where(self.Ks<0)]=0;
 				R, N,opt_v=self.CVXOPT_programming(self,)
 				R[np.where(R < 10 ** -6)] = 0
 				N[np.where(N < 10 ** -6)] = 0
@@ -159,7 +161,17 @@ class Cavity_simulation(object):
 				JN=np.concatenate((np.dot(np.diag(N),C),np.zeros([S, S])), axis=1);
 				J_all=np.concatenate((JR, JN), axis=0);
 				ev,_ = np.linalg.eig(J_all)
+				A=np.concatenate((np.concatenate((C, np.eye(M))),np.concatenate((np.zeros([S,S]), C.T))),axis=1);
+				if np.linalg.det(A)==0: continue;
+				Chi_R, Nu_N=self.linear_response_q(A, S, M)
+				chi=np.trace(Chi_R)/self.M
+				nu=np.trace(Nu_N)/self.S
+				Chi_array.append(chi);
+				Nu_array.append(nu);
 			self.sev = np.append(self.sev, ev)
+		if Dynamics=='quadratic':
+			self.chi_mean=np.mean(Chi_array)
+			self.nu_mean=np.mean(Nu_array)
 		self.mean_R, self.var_R=np.mean(R_list), np.var(R_list)
 		self.mean_N, self.var_N=np.mean(N_list), np.var(N_list)
 		self.Survive=np.mean(Survive_list)
@@ -289,6 +301,23 @@ class Cavity_simulation(object):
 		def integrand(z, j, d):
 			return np.exp(-z**2/2)*(z+d)**j 
 		return (2*np.pi)**(-.5)*quad(integrand, -d, np.inf, args = (j,d))[0]
+
+	def linear_response_q(self, A, S_p, M_p):
+		Chi=np.zeros([M_p,M_p+S_p])
+		for i in range(M_p):
+		    b = np.zeros(S_p+M_p)
+		    b[S_p+i]=1
+		    Chi[i,:] = np.linalg.solve(A, b)
+		Chi_R=Chi[:, 0:M_p]
+		Chi_N=Chi[:, M_p:]
+		Nu=np.zeros([S_p,M_p+S_p])
+		for i in range(S_p):
+			    b = np.zeros(S_p+M_p)
+			    b[i]=1
+			    Nu[i,:] = np.linalg.solve(A, b)
+		Nu_R=Chi[:, 0:M_p]
+		Nu_N=Chi[:, M_p:]
+		return Chi_R, Nu_N
 
 		
 
