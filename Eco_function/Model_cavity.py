@@ -132,6 +132,7 @@ class Cavity_simulation(object):
 				Opti_f.append(opt_v)
 			if Dynamics=='quadratic':	
 				Opti_f.append((np.linalg.norm(self.Ks-R))**2/self.M)
+			self.R_f, self.N_f=R,N
 			Growth.extend(np.dot(self.C,R)-self.costs)
 			Survive_list.append(Model_survive)
 			phi_R_list.append(np.count_nonzero(R)/float(self.M));
@@ -163,6 +164,9 @@ class Cavity_simulation(object):
 				ev,_ = np.linalg.eig(J_all)
 				A=np.concatenate((np.concatenate((C, np.eye(M))),np.concatenate((np.zeros([S,S]), C.T))),axis=1);
 				if np.linalg.det(A)==0: continue;
+				self.A=A
+				self.M_p=M
+				self.S_p=S
 				Chi_R, Nu_N=self.linear_response_q(A, S, M)
 				chi=np.trace(Chi_R)/self.M
 				nu=np.trace(Nu_N)/self.S
@@ -315,8 +319,8 @@ class Cavity_simulation(object):
 			    b = np.zeros(S_p+M_p)
 			    b[i]=1
 			    Nu[i,:] = np.linalg.solve(A, b)
-		Nu_R=Chi[:, 0:M_p]
-		Nu_N=Chi[:, M_p:]
+		Nu_R=Nu[:, 0:M_p]
+		Nu_N=Nu[:, M_p:]
 		return Chi_R, Nu_N
 
 		
