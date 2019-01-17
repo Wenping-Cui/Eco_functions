@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from Eco_function.eco_lib import *
 from Eco_function.eco_func import *
+from Eco_function.C_matrix import *
 from scipy.integrate import odeint
 from scipy.integrate import quad
 import random as rand
@@ -28,6 +29,7 @@ class Cavity_simulation(object):
 		self.binary_c=False
 		self.gamma_c=False
 		self.diag_c=False
+		self.C_type='None';
 		if self.diag_c:
 			self.S=self.M
 
@@ -52,18 +54,25 @@ class Cavity_simulation(object):
 			self.C=np.random.normal(self.mu/self.M, self.sigma_c/np.sqrt(self.M), [self.S,self.M])
 		if self.gamma_flag=='M/S':
 			self.C=np.random.normal(self.mu/self.S, self.sigma_c/np.sqrt(self.S), [self.S,self.M])
+
 		if self.Metabolic_Tradeoff:
 			self.costs=np.sum(self.C, axis=1)+self.epsilon*np.random.normal(0, 1, self.S)
 		else:
 			self.costs=np.random.normal(self.cost, self.sigma_m, self.S)		#Ode solver parameter
 		if self.binary_c:
 			self.C = np.random.binomial(1, self.p_c, [self.S,self.M])+self.epsilon*np.random.normal(0, 1,[self.S,self.M])
-		if self.gamma_c:
+		elif self.gamma_c:
 		    #shape, sscale = 2., 2.  # mean=4, std=2*sqrt(2)
 			self.C= np.random.gamma(self.shape, self.scale, [self.S,self.M])
-		if self.diag_c:
+		elif self.diag_c:
 			self.C= np.identity(self.M)+np.random.normal(self.mu/self.M, self.epsilon/np.sqrt(self.M),[self.M,self.M])
-
+		elif self.C_type=='circulant':
+			D = [7, 1]  # generalist, specialist
+			self.C= circ(self.M, D[1])+np.random.normal(self.mu/self.M, self.epsilon/np.sqrt(self.M),[self.M,self.M])
+		elif self.C_type=='block':
+			self.C= block(int(self.M/10), 10)+np.random.normal(self.mu/self.M, self.epsilon/np.sqrt(self.M),[self.M,self.M])
+		elif self.C_type=='diag_binomial':
+			self.C= np.identity(self.M)+np.random.binomial(1, self.p_c, [self.S,self.M])
 		#shape, scale = 2., 2.  # mean=4, std=2*sqrt(2)
 		#self.C= np.random.gamma(shape, scale, [self.S,self.M])
 		self.t0 = 0;
@@ -173,9 +182,6 @@ class Cavity_simulation(object):
 				Chi_array.append(chi);
 				Nu_array.append(nu);
 			self.sev = np.append(self.sev, ev)
-		if Dynamics=='quadratic':
-			self.chi_mean=np.mean(Chi_array)
-			self.nu_mean=np.mean(Nu_array)
 		self.mean_R, self.var_R=np.mean(R_list), np.var(R_list)
 		self.mean_N, self.var_N=np.mean(N_list), np.var(N_list)
 		self.Survive=np.mean(Survive_list)
@@ -200,6 +206,12 @@ class Cavity_simulation(object):
 		self.mean_var_simulation['power_bar']=np.std(power)
 		self.mean_var_simulation['opti_f']=np.mean(Opti_f)
 		self.mean_var_simulation['opti_f_bar']=np.std(Opti_f)
+		if Dynamics=='quadratic':
+			self.mean_var_simulation['nu']=np.mean(Nu_array)
+			self.mean_var_simulation['chi']=np.mean(Chi_array)
+		else:
+			self.mean_var_simulation['nu']='NaN'
+			self.mean_var_simulation['chi']='NaN'
 		self.N_survive_List=N_survive_list
 		self.phir_list=phi_R_list
 		self.phin_list=phi_N_list
