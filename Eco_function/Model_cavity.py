@@ -62,15 +62,21 @@ class Cavity_simulation(object):
 		if self.binary_c:
 			self.C = np.random.binomial(1, self.p_c, [self.S,self.M])+self.epsilon*np.random.normal(0, 1,[self.S,self.M])
 		elif self.gamma_c:
-		    #shape, sscale = 2., 2.  # mean=4, std=2*sqrt(2)
+			#shape, sscale = 2., 2.  # mean=4, std=2*sqrt(2)
 			self.C= np.random.gamma(self.shape, self.scale, [self.S,self.M])
 		elif self.diag_c:
 			self.C= np.identity(self.M)+np.random.normal(self.mu/self.M, self.epsilon/np.sqrt(self.M),[self.M,self.M])
 		elif self.C_type=='circulant':
 			D = [7, 1]  # generalist, specialist
-			self.C= circ(self.M, D[1])+np.random.normal(self.mu/self.M, self.epsilon/np.sqrt(self.M),[self.M,self.M])
+			B=circ(self.M, D[1])
+			if self.Bnormal:
+				B=B/np.sum(B[0,:])
+			self.C= B+np.random.normal(self.mu/self.M, self.epsilon/np.sqrt(self.M),[self.M,self.M])
 		elif self.C_type=='block':
-			self.C= block(int(self.M/10), 10)+np.random.normal(self.mu/self.M, self.epsilon/np.sqrt(self.M),[self.M,self.M])
+			B= block(int(self.M/10), 10)
+			if self.Bnormal:
+				B=B/np.sum(B[0,:])
+			self.C= B+np.random.normal(self.mu/self.M, self.epsilon/np.sqrt(self.M),[self.M,self.M])
 		elif self.C_type=='diag_binomial':
 			self.C= np.identity(self.M)+np.random.binomial(1, self.p_c, [self.S,self.M])
 		#shape, scale = 2., 2.  # mean=4, std=2*sqrt(2)
@@ -321,16 +327,16 @@ class Cavity_simulation(object):
 	def linear_response_q(self, A, S_p, M_p):
 		Chi=np.zeros([M_p,M_p+S_p])
 		for i in range(M_p):
-		    b = np.zeros(S_p+M_p)
-		    b[S_p+i]=1
-		    Chi[i,:] = np.linalg.solve(A, b)
+			b = np.zeros(S_p+M_p)
+			b[S_p+i]=1
+			Chi[i,:] = np.linalg.solve(A, b)
 		Chi_R=Chi[:, 0:M_p]
 		Chi_N=Chi[:, M_p:]
 		Nu=np.zeros([S_p,M_p+S_p])
 		for i in range(S_p):
-			    b = np.zeros(S_p+M_p)
-			    b[i]=1
-			    Nu[i,:] = np.linalg.solve(A, b)
+				b = np.zeros(S_p+M_p)
+				b[i]=1
+				Nu[i,:] = np.linalg.solve(A, b)
 		Nu_R=Nu[:, 0:M_p]
 		Nu_N=Nu[:, M_p:]
 		return Chi_R, Nu_N
