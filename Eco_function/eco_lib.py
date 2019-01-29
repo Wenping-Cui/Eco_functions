@@ -23,6 +23,7 @@ class Ecology_simulation(object):
             self.D = par[11];
             self.non_zero_resource =par[12];
             self.resource_amount = par[13];
+            self.K=self.resource_amount
             self.power_max = np.dot(np.dot(self.resource_amount,self.energies[self.non_zero_resource]),self.tau_inv[self.non_zero_resource]);
         else:
             self.K= par[11];
@@ -32,8 +33,8 @@ class Ecology_simulation(object):
         self.R_f = np.zeros(self.M);
         self.N_f = np.zeros(self.S);
         self.survive =0;
-        self.flag_renew=True
-        self.flag_linear=True;
+        self.flag_renew=False
+        self.flag_linear=False;
         self.gamma=1;
         self.K_sat=1;
         self.flag_nonvanish=False;
@@ -47,19 +48,14 @@ class Ecology_simulation(object):
 
         if self.flag_crossfeeding:
             self.DcE = np.zeros((self.S,self.M));
-            self.Dc = np.zeros((self.S,self.M));
-            self.Dc_T = np.zeros((self.S,self.M));
             self.D = np.asarray(self.D);
-            for i in xrange(self.S):
-                for beta in xrange(self.M):
-                    for alpha in xrange(self.M):
-                         self.DcE[i,beta] =  self.DcE[i,beta]+self.D[i][alpha, beta] * self.C[i, beta] * (self.energies[beta] - self.energies[alpha])
-                         self.Dc[i, beta] =self.Dc[i, beta]+ self.D[i][alpha, beta] * self.C[i, beta]
-                         self.Dc_T[i, alpha]=self.Dc_T[i, alpha]+ self.D[i][beta, alpha] * self.C[i, alpha]
+            for i in range(self.S):
+                for alpha in range(self.M):
+                         self.DcE[i,alpha]= self.C[i, alpha]*(self.energies[alpha]- np.sum(self.D[alpha, :]*self.energies[:]))
             self.R0 = np.zeros(self.M);
-            self.R0[self.non_zero_resource] = self.resource_amount;             
-            self.dynamics = self.get_vector_field_crossfeeding_on
-            par = [self.M, self.S, self.R0, self.energies, self.tau_inv, self.costs, self.growth, self.C, self.D, self.DcE, self.Dc] 
+            self.R0[self.non_zero_resource] = self.resource_amount;         
+            self.dynamics = self.dynamics_nonrenewable_typeI_crossfeeding_on
+            par = [self.M, self.S, self.R0, self.energies, self.tau_inv, self.costs, self.growth, self.C, self.D, self.DcE] 
         else: 
             if self.flag_renew:
                 if self.flag_linear:
@@ -133,22 +129,22 @@ class Ecology_simulation(object):
         return output_vector     
 
 
-    def get_vector_field_crossfeeding_on(self, Y, t, par):
-        [M, S, R0, energies, tau_inv, costs, growth, C, D, DcE, Dc] = par
+   ##############################################################################  
+    def dynamics_nonrenewable_typeI_crossfeeding_on(self, Y, t, par):
+        [M, S, R0, energies, tau_inv, costs, growth, C, D, DcE] = par
         R = Y[0:M]
         N = Y[M:M + S]
         p0 = C * R
-        p1 = np.einsum('i,ib->ib', N, p0)
-        resource_production1 = np.einsum('iba,ia ->b', D, p1)
+        p1 = N.dot(p0)
+        resource_production = D.dot(p1)
         species = N*growth*((DcE.dot(R))-costs)
-        resources =(R0-R)*tau_inv - N.dot(Dc)*R + resource_production1
+        resources =R*(R0-R)*tau_inv - p1 + resource_production
         output = np.concatenate((resources, species));
         return output
 
     def test(self,):
         Y_ini = np.concatenate((self.R_ini, self.N_ini, self.Q_ini))
    
-
 
 
 ##########################################################################

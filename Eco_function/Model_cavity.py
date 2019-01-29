@@ -29,14 +29,17 @@ class Cavity_simulation(object):
 		self.binary_c=False
 		self.gamma_c=False
 		self.diag_c=False
+		self.flag_crossfeeding=False
 		self.C_type='None';
+		self.D=0
+		self.Bnormal=False
+		self.non_zero_resource=range(self.M)
 		if self.diag_c:
 			self.S=self.M
 
 		self.p_c=0.2
 		self.epsilon=10**(-3)
 	def initialize_random_variable(self,):
-		self.flag_crossfeeding = False; # simulation with crossfeeding or not.
 		#################################
 		# RESOURCE PROPERTIES
 		##################################
@@ -50,6 +53,10 @@ class Cavity_simulation(object):
 		# Build Species Pool
 		##################################
 		self.growth=np.ones(self.S)
+		self.t0 = 0;
+		self.t1 = self.parameters['t1'];
+		self.Nt = self.parameters['Nt']
+		self.T_par = [self.t0, self.t1, self.Nt];
 		if self.gamma_flag=='S/M':
 			self.C=np.random.normal(self.mu/self.M, self.sigma_c/np.sqrt(self.M), [self.S,self.M])
 		if self.gamma_flag=='M/S':
@@ -63,7 +70,17 @@ class Cavity_simulation(object):
 			self.C = np.random.binomial(1, self.p_c, [self.S,self.M])+self.epsilon*np.random.normal(0, 1,[self.S,self.M])
 		elif self.gamma_c:
 			#shape, sscale = 2., 2.  # mean=4, std=2*sqrt(2)
-			self.C= np.random.gamma(self.shape, self.scale, [self.S,self.M])
+			self.shape=self.mu**2/(self.epsilon**2*self.M)
+			self.scale=self.epsilon**2/self.mu
+			B=0;
+			if self.diag_c:
+				B=np.identity(self.M)
+			elif self.C_type=='circulant':
+				D = [7, 1]  # generalist, specialist
+				B=circ(self.M, D[1])
+			elif self.C_type=='block':
+				B= block(int(self.M/10), 10)
+			self.C= B+np.random.gamma(self.shape, self.scale, [self.S,self.M])
 		elif self.diag_c:
 			self.C= np.identity(self.M)+np.random.normal(self.mu/self.M, self.epsilon/np.sqrt(self.M),[self.M,self.M])
 		elif self.C_type=='circulant':
@@ -81,14 +98,11 @@ class Cavity_simulation(object):
 			self.C= np.identity(self.M)+np.random.binomial(1, self.p_c, [self.S,self.M])
 		#shape, scale = 2., 2.  # mean=4, std=2*sqrt(2)
 		#self.C= np.random.gamma(shape, scale, [self.S,self.M])
-		self.t0 = 0;
-		self.t1 = self.parameters['t1'];
-		self.Nt = self.parameters['Nt']
-		self.T_par = [self.t0, self.t1, self.Nt];
-
 		self.R_ini=0.1*np.ones(self.M)
 		self.N_ini=0.1*np.ones(self.S)
 		self.sim_pars = [self.flag_crossfeeding, self.M, self.S, self.R_ini, self.N_ini,self.T_par, self.C, self.energies, self.tau_inv, self.costs, self.growth, self.Ks] 
+		if self.flag_crossfeeding: 
+			self.sim_pars = [self.flag_crossfeeding, self.M, self.S, self.R_ini, self.N_ini, [self.t0, self.t1, self.Nt], self.C, self.energies, self.tau_inv,self.costs,self.growth, self.D, self.non_zero_resource,self.Ks]
 		return self.sim_pars
 
 	def ode_simulation(self,plot=False, Dynamics='linear', Initial='Auto', Simulation_type='ODE'): 
@@ -115,7 +129,6 @@ class Cavity_simulation(object):
 				self.sim_pars=self.initialize_random_variable()
 			if Initial=='Manually':
 				self.sim_pars = [self.flag_crossfeeding, self.M, self.S, self.R_ini, self.N_ini,self.T_par, self.C, self.energies, self.tau_inv, self.costs, self.growth, self.Ks]
-
 			if Simulation_type=='ODE':
 				Model =Ecology_simulation(self.sim_pars)
 				if Dynamics=='linear':
@@ -213,11 +226,14 @@ class Cavity_simulation(object):
 		self.mean_var_simulation['opti_f']=np.mean(Opti_f)
 		self.mean_var_simulation['opti_f_bar']=np.std(Opti_f)
 		if Dynamics=='quadratic':
+			Nu_array=np.asarray(Nu_array)
 			self.mean_var_simulation['nu']=np.mean(Nu_array)
+			self.mean_var_simulation['nu_threshold']=np.mean(Nu_array[np.where((Nu_array>-10000) & (Nu_array<0))])
 			self.mean_var_simulation['chi']=np.mean(Chi_array)
 		else:
 			self.mean_var_simulation['nu']='NaN'
 			self.mean_var_simulation['chi']='NaN'
+			self.mean_var_simulation['nu_threshold']='NaN'
 		self.N_survive_List=N_survive_list
 		self.phir_list=phi_R_list
 		self.phin_list=phi_N_list
