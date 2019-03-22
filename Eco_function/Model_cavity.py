@@ -7,6 +7,7 @@ import numpy as np
 from Eco_function.eco_lib import *
 from Eco_function.eco_func import *
 from Eco_function.C_matrix import *
+from numpy import linalg as LA
 from scipy.integrate import odeint
 from scipy.integrate import quad
 import random as rand
@@ -26,17 +27,13 @@ class Cavity_simulation(object):
 		self.sigma_m=parameters['sigma_m']
 		self.sample_size=parameters['sample_size']
 		self.Metabolic_Tradeoff=False
-		self.binary_c=False
-		self.gamma_c=False
-		self.diag_c=False
 		self.flag_crossfeeding=False
-		self.C_type='None';
+		self.C_type='gaussian'
+		self.B_type='null'
+		self.gamma_flag='S/M'
 		self.D=0
 		self.Bnormal=False
 		self.non_zero_resource=range(self.M)
-		if self.diag_c:
-			self.S=self.M
-
 		self.p_c=0.2
 		self.epsilon=10**(-3)
 	def initialize_random_variable(self,):
@@ -57,45 +54,42 @@ class Cavity_simulation(object):
 		self.t1 = self.parameters['t1'];
 		self.Nt = self.parameters['Nt']
 		self.T_par = [self.t0, self.t1, self.Nt];
-		if self.gamma_flag=='S/M':
-			self.C=np.random.normal(self.mu/self.M, self.sigma_c/np.sqrt(self.M), [self.S,self.M])
-		if self.gamma_flag=='M/S':
-			self.C=np.random.normal(self.mu/self.S, self.sigma_c/np.sqrt(self.S), [self.S,self.M])
 
 		if self.Metabolic_Tradeoff:
 			self.costs=np.sum(self.C, axis=1)+self.epsilon*np.random.normal(0, 1, self.S)
 		else:
 			self.costs=np.random.normal(self.cost, self.sigma_m, self.S)		#Ode solver parameter
-		if self.binary_c:
-			self.C = np.random.binomial(1, self.p_c, [self.S,self.M])+self.epsilon*np.random.normal(0, 1,[self.S,self.M])
-		elif self.gamma_c:
-			#shape, sscale = 2., 2.  # mean=4, std=2*sqrt(2)
-			self.shape=self.mu**2/(self.epsilon**2*self.M)
-			self.scale=self.epsilon**2/self.mu
-			B=0;
-			if self.diag_c:
-				B=np.identity(self.M)
-			elif self.C_type=='circulant':
-				D = [7, 1]  # generalist, specialist
-				B=circ(self.M, D[1])
-			elif self.C_type=='block':
-				B= block(int(self.M/10), 10)
-			self.C= B+np.random.gamma(self.shape, self.scale, [self.S,self.M])
-		elif self.diag_c:
-			self.C= np.identity(self.M)+np.random.normal(self.mu/self.M, self.epsilon/np.sqrt(self.M),[self.M,self.M])
-		elif self.C_type=='circulant':
+
+########################################################################################################
+		###   Make the determined matrix
+########################################################################################################
+		B=0
+		if self.B_type=='identity':
+			B=np.identity(self.M)
+		elif self.B_type=='circulant':
 			D = [7, 1]  # generalist, specialist
 			B=circ(self.M, D[1])
-			if self.Bnormal:
-				B=B/np.sum(B[0,:])
-			self.C= B+np.random.normal(self.mu/self.M, self.epsilon/np.sqrt(self.M),[self.M,self.M])
-		elif self.C_type=='block':
+		elif self.B_type=='block':
 			B= block(int(self.M/10), 10)
-			if self.Bnormal:
+########################################################################################################
+		if self.Bnormal:
 				B=B/np.sum(B[0,:])
-			self.C= B+np.random.normal(self.mu/self.M, self.epsilon/np.sqrt(self.M),[self.M,self.M])
-		elif self.C_type=='diag_binomial':
-			self.C= np.identity(self.M)+np.random.binomial(1, self.p_c, [self.S,self.M])
+##################################################################################################################						
+		if self.gamma_flag=='S/M':
+			self.C=B+np.random.normal(self.mu/self.M, self.sigma_c/np.sqrt(self.M), [self.S,self.M])
+		if self.gamma_flag=='M/S':
+			self.C=B+np.random.normal(self.mu/self.S, self.sigma_c/np.sqrt(self.S), [self.S,self.M])
+
+		if self.C_type=='gamma':
+			self.shape=self.mu**2/(self.epsilon**2*self.M)
+			self.scale=self.epsilon**2/self.mu
+			self.C= B+np.random.gamma(self.shape, self.scale, [self.S,self.M])
+		elif self.C_type=='binomial':
+			self.C= B+np.random.binomial(1, self.p_c, [self.S,self.M])
+		elif self.C_type=='gaussian':
+			self.C= B+np.random.normal(self.mu/self.S, self.epsilon/np.sqrt(self.S), [self.S,self.M])
+		elif self.C_type=='uniform':
+			self.C= B+np.random.uniform(0,self.epsilon, [self.S,self.M])
 		#shape, scale = 2., 2.  # mean=4, std=2*sqrt(2)
 		#self.C= np.random.gamma(shape, scale, [self.S,self.M])
 		self.R_ini=0.1*np.ones(self.M)
@@ -123,6 +117,11 @@ class Cavity_simulation(object):
 		Growth=[]
 		Chi_array=[];
 		Nu_array=[];
+		Lamc_array=[]
+		lam_min_array=[]
+		lam_min_cor_array=[]
+		lam_min_ran_array=[]
+		Lam_array=[];
 		self.sev = np.array([])
 		for step in range(self.sample_size):	
 			if Initial=='Auto':
@@ -175,6 +174,27 @@ class Cavity_simulation(object):
 			C=self.C;
 			C=np.delete(C, np.where(R==0),axis=1)
 			C=np.delete(C, np.where(N==0),axis=0)
+			eigvs=np.real(LA.eigvals(np.dot(C,C.transpose())))
+			eigvs_cor=np.real(LA.eigvals(np.einsum('i,ij->ij', N[np.where(N>0)], np.dot(C,C.transpose()))))
+			N_bar=np.random.permutation(N[np.where(N>0)])
+			eigvs_ran=np.real(LA.eigvals(np.einsum('i,ij->ij', N_bar, np.dot(C,C.transpose()))))
+			if len(eigvs)>1:
+				Lam_array.extend(eigvs_cor)
+				lam_min=np.amin(eigvs)
+				lam_min_array.append(lam_min)
+			else:
+				lam_min_array.append(0)
+			if len(eigvs_cor)>1:
+				Lamc_array.extend(eigvs_cor)
+				lam_min_cor=np.amin(eigvs_cor)
+				lam_min_cor_array.append(lam_min_cor)
+			else:
+				lam_min_cor_array.append(0)
+			if len(eigvs_ran)>1:
+				lam_min_ran=np.amin(eigvs_ran)
+				lam_min_ran_array.append(lam_min_ran)
+			else:
+				lam_min_ran_array.append(0)
 			R=R[np.where(R>0)]
 			N=N[np.where(N>0)]
 			N_survive_list.extend(N)
@@ -201,6 +221,11 @@ class Cavity_simulation(object):
 				Chi_array.append(chi);
 				Nu_array.append(nu);
 			self.sev = np.append(self.sev, ev)
+		self.packing=np.asarray(phi_N_list)/np.asarray(phi_R_list)
+		self.lamcs=Lamc_array
+		self.lam_min_cor_array=lam_min_cor_array
+		self.lams=Lam_array
+		self.lam_min_array=lam_min_array
 		self.mean_R, self.var_R=np.mean(R_list), np.var(R_list)
 		self.mean_N, self.var_N=np.mean(N_list), np.var(N_list)
 		self.Survive=np.mean(Survive_list)
@@ -225,6 +250,9 @@ class Cavity_simulation(object):
 		self.mean_var_simulation['power_bar']=np.std(power)
 		self.mean_var_simulation['opti_f']=np.mean(Opti_f)
 		self.mean_var_simulation['opti_f_bar']=np.std(Opti_f)
+		self.mean_var_simulation['lam_min']=np.mean(lam_min_array)
+		self.mean_var_simulation['lam_min_cor']=np.mean(lam_min_cor_array)
+		self.mean_var_simulation['lam_min_ran']=np.mean(lam_min_ran_array)
 		if Dynamics=='quadratic':
 			Nu_array=np.asarray(Nu_array)
 			self.mean_var_simulation['nu']=np.mean(Nu_array)
@@ -324,7 +352,7 @@ class Cavity_simulation(object):
 		h=h.reshape((self.M+self.S,1))
 
 		# Construct the QP, invoke solver
-		obj = cvx.Minimize(cvx.sum(cvx.kl_div(K, R)))
+		obj = cvx.Minimize(cvx.sum(cvx.kl_div(K+1e-10, R+ 1e-10)))
 		constraints =[G*R <= h]
 		prob = cvx.Problem(obj, constraints)
 		prob.solver_stats
