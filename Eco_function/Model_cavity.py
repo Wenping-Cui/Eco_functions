@@ -133,6 +133,7 @@ class Cavity_simulation(object):
 				if Dynamics=='linear':
 					Model.flag_nonvanish=False;
 					Model.flag_renew=True;
+					Model.flag_linear=True;
 				if Dynamics=='constant':
 					Model.flag_nonvanish=True;
 				elif Dynamics=='quadratic':
