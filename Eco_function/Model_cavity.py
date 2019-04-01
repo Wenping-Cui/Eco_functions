@@ -36,6 +36,7 @@ class Cavity_simulation(object):
 		self.non_zero_resource=range(self.M)
 		self.p_c=0.2
 		self.epsilon=10**(-3)
+		self.e=1.0
 	def initialize_random_variable(self,):
 		#################################
 		# RESOURCE PROPERTIES
@@ -139,25 +140,35 @@ class Cavity_simulation(object):
 				elif Dynamics=='quadratic':
 					Model.flag_renew=False;
 					Model.flag_nonvanish=False;
+				if self.flag_crossfeeding:
+					Model.e=self.e
 				Model.simulation()
 				self.R_f, self.N_f=Model.R_f, Model.N_f;
 				R, N=Model.R_f, Model.N_f;
 				Model_survive=Model.survive;
 				Model_costs_power=Model.costs_power
-			if Simulation_type=='QP' and  Dynamics=='quadratic':
+			if Simulation_type=='CVXOPT' and  Dynamics=='quadratic':
 				R, N=self.Quadratic_programming(self,)
-				R[np.where(R < 10 ** -6)] = 0
+				R[np.where(R < 10 ** -8)] = 0
 				N[np.where(N < 10 ** -6)] = 0
 				Model_costs_power=N.dot(self.costs)
 				Model_survive=np.count_nonzero(N)
 			if Simulation_type=='CVXOPT' and Dynamics=='linear':
 				self.Ks[np.where(self.Ks<0)]=0;
-				R, N,opt_v=self.CVXOPT_programming(self,)
-				R[np.where(R < 10 ** -6)] = 0
+				R, N,opt_v,fail=self.CVXOPT_programming(self.M, self.S, self.Ks, self.costs, self.C)
+				if fail==1: continue 
+				R[np.where(R < 10 ** -8)] = 0
 				N[np.where(N < 10 ** -6)] = 0
 				Model_costs_power=N.dot(self.costs)
 				Model_survive=np.count_nonzero(N)
 				Opti_f.append(opt_v)
+			if Simulation_type=='CVXOPT' and self.flag_crossfeeding:
+				R, N, fail=self.CVXOPT_crossfeeding(self.S, self.M, self.K, self.C, self.D, self.e, self.costs)
+				if fail==1: continue 
+				R[np.where(R < 10 ** -8)] = 0
+				N[np.where(N < 10 ** -6)] = 0
+				Model_costs_power=N.dot(self.costs)
+				Model_survive=np.count_nonzero(N)
 			if Dynamics=='quadratic':	
 				Opti_f.append((np.linalg.norm(self.Ks-R))**2/self.M)
 			self.R_f, self.N_f=R,N
@@ -206,6 +217,7 @@ class Cavity_simulation(object):
 				JN=np.concatenate((np.dot(np.diag(N), C),np.zeros([ S, S])), axis=1);
 				J_all=np.concatenate((JR, JN), axis=0);
 				ev,_ = np.linalg.eig(J_all)
+				self.sev = np.append(self.sev, ev)
 			if Dynamics=='quadratic':
 				JR=np.concatenate((-np.diag(R),-np.dot(np.diag(R),C.T)), axis=1);
 				JN=np.concatenate((np.dot(np.diag(N),C),np.zeros([S, S])), axis=1);
@@ -221,7 +233,7 @@ class Cavity_simulation(object):
 				nu=np.trace(Nu_N)/self.S
 				Chi_array.append(chi);
 				Nu_array.append(nu);
-			self.sev = np.append(self.sev, ev)
+				self.sev = np.append(self.sev, ev)
 		self.packing=np.asarray(phi_N_list)/np.asarray(phi_R_list)
 		self.lamcs=Lamc_array
 		self.lam_min_cor_array=lam_min_cor_array
@@ -331,39 +343,112 @@ class Cavity_simulation(object):
 		return R, N
 
 
-	def CVXOPT_programming(self, Initial='Auto'):
-		if Initial=='Auto':
-			self.sim_pars=self.initialize_random_variable()
-		if Initial=='Manually':
-			self.sim_pars = [self.flag_crossfeeding, self.M, self.S, self.R_ini, self.N_ini,self.T_par, self.C, self.energies, self.tau_inv, self.costs, self.growth, self.Ks] 	
+	def CVXOPT_programming(self,M, S, K, costs, C):
+		failed=0
 		# Define QP parameters (directly)
-		M = np.identity(self.M)
-		P = np.dot(M.T, M)
-		q = -np.dot(self.Ks,M).reshape((self.M,))
-		G1= self.C
-		h1= self.costs
+		G1= C
+		h1= costs
 
-		G2= -np.identity(self.M)
-		h2= np.zeros(self.M)
+		G2= -np.identity(M)
+		h2= np.zeros(M)
 		G=np.concatenate((G1, G2), axis=0)
 		h=np.concatenate((h1, h2), axis=None)
 
-		R = cvx.Variable(shape=(self.M,1))
-		K = self.Ks.reshape((self.M,1))
-		h=h.reshape((self.M+self.S,1))
+		R = cvx.Variable(shape=(M,1))
+		K = K.reshape((M,1))
+		h=h.reshape((M+S,1))
 
 		# Construct the QP, invoke solver
 		obj = cvx.Minimize(cvx.sum(cvx.kl_div(K+1e-10, R+ 1e-10)))
 		constraints =[G*R <= h]
 		prob = cvx.Problem(obj, constraints)
 		prob.solver_stats
-		prob.solve(solver=cvx.ECOS,abstol=1e-8,reltol=1e-8,warm_start=True)
+		try:
+			prob.solve(solver=cvx.ECOS,abstol=1e-12,reltol=1e-12,warm_start=True,verbose=False,max_iters=300)
+		except:
+			N=np.zeros(S)
+			R=np.zeros(M)
+			return R, N, 0, 1
 		# Extract optimal value and solution
-		N=(constraints[0].dual_value)[0:self.S]
+		N=(constraints[0].dual_value)[0:S]
 		R=R.value
-		R=R.reshape(self.M);
-		N=N.reshape(self.S);
-		return R, N, prob.value
+		R=R.reshape(M);
+		N=N.reshape(S);
+		return R, N, prob.value,failed
+	def CVXOPT_crossfeeding(self, S, M, K, C, D, e, costs,tol=1e-7,shift_size=1,eps=1e-20,
+                 alpha=0.5,R0t_0=10,verbose=False,max_iters=1000):
+	        Q = np.eye(M) - (1-e)*D
+	        Qinv = np.linalg.inv(Q)
+	        Qinv_aa = np.diag(Qinv)
+	        w = Qinv_aa*e
+	        Qinv = Qinv - np.diag(Qinv_aa)
+	        #Construct variables for optimizer
+	        G = C*e/w
+	        h = costs.reshape((S,1))
+	        #Set up the loop
+	        Rf = np.inf
+	        Rf_old = 0
+	        k=0
+	        ncyc=0
+	        Delta = 1
+	        Delta_old=1
+	        failed = 0
+	        R0t=K
+	        while np.linalg.norm(Rf_old - Rf) > tol and k < max_iters:
+	            try:
+	                start_time = time.time()
+	        
+	                wR = cvx.Variable(shape=(M,1)) #weighted resources
+	        
+	                #Need to multiply by w to get properly weighted KL divergence
+	                R0t = np.sqrt(R0t**2+eps)
+	                wR0 = (R0t*w).reshape((M,1))
+
+	                #Solve
+	                obj = cvx.Minimize(cvx.sum(cvx.kl_div(wR0, wR)))
+	                constraints = [G*wR <= h, wR >= 0]
+	                prob = cvx.Problem(obj, constraints)
+	                prob.solver_stats
+	                prob.solve(solver=cvx.ECOS,abstol=0.1*tol,reltol=0.1*tol,warm_start=True,verbose=False,max_iters=200)
+
+	                #Record the results
+	                Rf_old = Rf
+	                Nf=constraints[0].dual_value[0:S].reshape(S)
+	                Rf=wR.value.reshape(M)/w
+
+	                #Update the effective resource concentrations
+	                R0t_new = K+ Qinv.dot(K-Rf)/Qinv_aa
+	                Delta_R0t = R0t_new-R0t
+	                R0t = R0t + alpha*Delta_R0t
+	                
+	                Delta_old = Delta
+	                Delta = np.linalg.norm(Rf_old - Rf)
+	                if verbose:
+	                    print('Iteration: '+str(k))
+	                    print('Delta: '+str(Delta))
+	                    print('---------------- '+str(time.time()-start_time)[:4]+' s ----------------')
+	            except:
+	                #If optimization fails, try new R0t
+	                shift = shift_size*np.random.randn(M)
+	                if np.min(R0t + shift) < 0: #Prevent any values from becoming negative
+	                    R0t = R0t_0*np.ones(M)
+	                    Rf = np.inf
+	                    Rf_old = 0
+	                else:
+	                    R0t = R0t + shift
+	                if verbose:
+	                    print('Added '+str(eps)+' times random numbers')
+	            k+=1
+	            #Check for limit cycle
+	            if np.isfinite(Delta) and Delta > tol and np.abs(Delta-Delta_old) < 0.1*tol:
+	                ncyc+=1
+	            if ncyc > 10:
+	                print('Limit cycle detected')
+	                k = max_iters
+	        if k == max_iters:
+	            failed = 1
+	        return Rf, Nf, failed
+
 	def ifunc(self,j, d):
 		def integrand(z, j, d):
 			return np.exp(-z**2/2)*(z+d)**j 

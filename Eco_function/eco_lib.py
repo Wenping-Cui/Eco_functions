@@ -24,7 +24,7 @@ class Ecology_simulation(object):
             self.non_zero_resource =par[12];
             self.resource_amount = par[13];
             self.K=self.resource_amount
-            self.power_max = np.dot(np.dot(self.resource_amount,self.energies[self.non_zero_resource]),self.tau_inv[self.non_zero_resource]);
+            self.power_max = np.dot(np.dot(self.resource_amount,self.energies),self.tau_inv);
         else:
             self.K= par[11];
             self.power_max =np.dot(self.K*self.tau_inv, self.energies);
@@ -38,6 +38,7 @@ class Ecology_simulation(object):
         self.gamma=1;
         self.K_sat=1;
         self.flag_nonvanish=False;
+        self.e=0
 
     def simulation(self,):
         Y_ini = np.concatenate((self.R_ini, self.N_ini))
@@ -45,17 +46,12 @@ class Ecology_simulation(object):
         self.costs= np.asarray(self.costs);
         self.C = np.asarray(self.C);
 
-
         if self.flag_crossfeeding:
-            self.DcE = np.zeros((self.S,self.M));
             self.D = np.asarray(self.D);
-            for i in range(self.S):
-                for alpha in range(self.M):
-                         self.DcE[i,alpha]= self.C[i, alpha]*(self.energies[alpha]- np.sum(self.D[alpha, :]*self.energies[:]))
             self.R0 = np.zeros(self.M);
-            self.R0[self.non_zero_resource] = self.resource_amount;         
+            self.R0= self.resource_amount;         
             self.dynamics = self.dynamics_nonrenewable_typeI_crossfeeding_on
-            par = [self.M, self.S, self.R0, self.energies, self.tau_inv, self.costs, self.growth, self.C, self.D, self.DcE] 
+            par = [self.M, self.S, self.R0, self.energies, self.tau_inv, self.costs, self.growth, self.C, self.D, self.e] 
         else: 
             if self.flag_renew:
                 if self.flag_linear:
@@ -131,14 +127,14 @@ class Ecology_simulation(object):
 
    ##############################################################################  
     def dynamics_nonrenewable_typeI_crossfeeding_on(self, Y, t, par):
-        [M, S, R0, energies, tau_inv, costs, growth, C, D, DcE] = par
+        [M, S, R0, energies, tau_inv, costs, growth, C, D, e] = par
         R = Y[0:M]
         N = Y[M:M + S]
-        p0 = C * R
+        p0 =C*R
         p1 = N.dot(p0)
-        resource_production = D.dot(p1)
-        species = N*growth*((DcE.dot(R))-costs)
-        resources =R*(R0-R)*tau_inv - p1 + resource_production
+        resource_production = (1-e)*D.dot(p1)
+        species = N*growth*(e*C.dot(R)-costs)
+        resources =(R0-R)*tau_inv - p1 + resource_production
         output = np.concatenate((resources, species));
         return output
 
