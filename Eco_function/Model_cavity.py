@@ -46,7 +46,10 @@ class Cavity_simulation(object):
 		#Creat energy vector
 		self.deltaE = 1.0;
 		self.energies = self.deltaE*np.ones(self.M)
-		self.tau_inv = np.ones(self.M)
+		if self.parameters.get('tau_inv')==None:
+			self.tau_inv = np.ones(self.M)
+		else: 
+			self.tau_inv = self.parameters['tau_inv']*np.ones(self.M)
 		#################################
 		# Build Species Pool
 		##################################
@@ -101,6 +104,7 @@ class Cavity_simulation(object):
 		return self.sim_pars
 
 	def ode_simulation(self,plot=False, Dynamics='linear', Initial='Auto', Simulation_type='ODE'): 
+		assert Simulation_type in ['ODE', 'CVXOPT'],"Check Simulation_type is 'CVXOPT' or 'ODE'"
 		phi_R_list=[];
 		phi_N_list=[];
 		R_list=[];
@@ -118,6 +122,8 @@ class Cavity_simulation(object):
 		Growth=[]
 		Chi_array=[];
 		Nu_array=[];
+		Chi_array_test=[];
+		Nu_array_test=[];
 		Lamc_array=[]
 		lam_min_array=[]
 		lam_min_cor_array=[]
@@ -150,7 +156,7 @@ class Cavity_simulation(object):
 			if Simulation_type=='CVXOPT' and  Dynamics=='quadratic':
 				R, N=self.Quadratic_programming(self,)
 				R[np.where(R < 10 ** -8)] = 0
-				N[np.where(N < 10 ** -6)] = 0
+				N[np.where(N < 10 ** -4)] = 0
 				Model_costs_power=N.dot(self.costs)
 				Model_survive=np.count_nonzero(N)
 			if Simulation_type=='CVXOPT' and Dynamics=='linear':
@@ -158,7 +164,7 @@ class Cavity_simulation(object):
 				R, N,opt_v,fail=self.CVXOPT_programming(self.M, self.S, self.Ks, self.costs, self.C)
 				if fail==1: continue 
 				R[np.where(R < 10 ** -8)] = 0
-				N[np.where(N < 10 ** -6)] = 0
+				N[np.where(N < 10 ** -4)] = 0
 				Model_costs_power=N.dot(self.costs)
 				Model_survive=np.count_nonzero(N)
 				Opti_f.append(opt_v)
@@ -166,7 +172,7 @@ class Cavity_simulation(object):
 				R, N, fail=self.CVXOPT_crossfeeding(self.S, self.M, self.K, self.C, self.D, self.e, self.costs)
 				if fail==1: continue 
 				R[np.where(R < 10 ** -8)] = 0
-				N[np.where(N < 10 ** -6)] = 0
+				N[np.where(N < 10 ** -4)] = 0
 				Model_costs_power=N.dot(self.costs)
 				Model_survive=np.count_nonzero(N)
 			if Dynamics=='quadratic':	
@@ -218,7 +224,29 @@ class Cavity_simulation(object):
 				J_all=np.concatenate((JR, JN), axis=0);
 				ev,_ = np.linalg.eig(J_all)
 				self.sev = np.append(self.sev, ev)
-			if Dynamics=='quadratic':
+				#W1=(np.tile(np.dot(N,C)+1, (M, 1))).T
+				W1=np.diag(np.dot(N,C)+1)
+				W2=(np.einsum('ij,j->ij', C, R)).T
+				A=np.concatenate((np.concatenate((C, W1)),np.concatenate((np.zeros([S,S]), W2))),axis=1)
+				if np.linalg.det(A)==0.0: continue
+
+				W3=(np.einsum('ij,j->ij', C, R/(np.dot(N,C)+1))).T
+				if np.linalg.det(W3.T.dot(C.T))==0.0: continue
+				H=np.linalg.inv(W3.T.dot(C.T))
+				
+				Chi_R, Nu_N=self.linear_response_l(S, M, R, A)
+				Chi_R_test, Nu_N_test=self.linear_response_l_test(N, R, C, W3, H)
+
+				chi=-np.trace(Chi_R)/self.M
+				nu=np.trace(Nu_N)/self.S
+				Chi_array.append(chi);
+				Nu_array.append(nu);
+
+				chi_test=np.trace(Chi_R_test)/self.M
+				nu_test=np.trace(Nu_N_test)/self.S
+				Chi_array_test.append(chi_test);
+				Nu_array_test.append(nu_test);
+			elif Dynamics=='quadratic':
 				JR=np.concatenate((-np.diag(R),-np.dot(np.diag(R),C.T)), axis=1);
 				JN=np.concatenate((np.dot(np.diag(N),C),np.zeros([S, S])), axis=1);
 				J_all=np.concatenate((JR, JN), axis=0);
@@ -271,6 +299,13 @@ class Cavity_simulation(object):
 			self.mean_var_simulation['nu']=np.mean(Nu_array)
 			self.mean_var_simulation['nu_threshold']=np.mean(Nu_array[np.where((Nu_array>-10000) & (Nu_array<0))])
 			self.mean_var_simulation['chi']=np.mean(Chi_array)
+		elif Dynamics=='linear':
+			Nu_array=np.asarray(Nu_array)
+			self.mean_var_simulation['nu']=np.mean(Nu_array)
+			self.mean_var_simulation['nu_threshold']=np.mean(Nu_array[np.where((Nu_array>-10000) & (Nu_array<0))])
+			self.mean_var_simulation['chi']=np.mean(Chi_array)
+			self.mean_var_simulation['nu_test']=np.mean(Nu_array_test)
+			self.mean_var_simulation['chi_test']=np.mean(Chi_array_test)
 		else:
 			self.mean_var_simulation['nu']='NaN'
 			self.mean_var_simulation['chi']='NaN'
@@ -314,11 +349,11 @@ class Cavity_simulation(object):
 			self.sim_pars = [self.flag_crossfeeding, self.M, self.S, self.R_ini, self.N_ini,self.T_par, self.C, self.energies, self.tau_inv, self.costs, self.growth, self.Ks] 	
 		# Define QP parameters (directly)
 		M = np.identity(self.M)
-		P = np.dot(M.T, M)
-		q = -np.dot(self.Ks,M).reshape((self.M,))
+		P = np.dot(M.T, M)*self.parameters['tau_inv']
+		q = -np.dot(self.Ks,M).reshape((self.M,))*self.parameters['tau_inv']
+
 		G1= self.C
 		h1= self.costs
-
 		G2= -np.identity(self.M)
 		h2= np.zeros(self.M)
 		G=np.concatenate((G1, G2), axis=0)
@@ -346,7 +381,7 @@ class Cavity_simulation(object):
 	def CVXOPT_programming(self,M, S, K, costs, C):
 		failed=0
 		# Define QP parameters (directly)
-		G1= C
+		G1= C/self.parameters['tau_inv']
 		h1= costs
 
 		G2= -np.identity(M)
@@ -355,7 +390,7 @@ class Cavity_simulation(object):
 		h=np.concatenate((h1, h2), axis=None)
 
 		R = cvx.Variable(shape=(M,1))
-		K = K.reshape((M,1))
+		K = K.reshape((M,1))*self.parameters['tau_inv']
 		h=h.reshape((M+S,1))
 
 		# Construct the QP, invoke solver
@@ -371,7 +406,7 @@ class Cavity_simulation(object):
 			return R, N, 0, 1
 		# Extract optimal value and solution
 		N=(constraints[0].dual_value)[0:S]
-		R=R.value
+		R=R.value/self.parameters['tau_inv']
 		R=R.reshape(M);
 		N=N.reshape(S);
 		return R, N, prob.value,failed
@@ -470,6 +505,17 @@ class Cavity_simulation(object):
 		Nu_R=Nu[:, 0:M_p]
 		Nu_N=Nu[:, M_p:]
 		return Chi_R, Nu_N
+	def linear_response_l(self, S, M, R, A):
+		B=np.diag(np.concatenate((np.ones(S), -R)))
+		Sup=np.linalg.inv(A).dot(B)
+		Chi_R=Sup[0:M,S:]
+		Nu_N=Sup[M:, 0:S]
+		return Chi_R, Nu_N
+	def linear_response_l_test(self, N, R, C, W3, H):
+		Chi1_R=-np.diag(R/(np.dot(N,C)+1))+W3.dot(H).dot(W3.T)
+		Nu1_N=-H
+		return Chi1_R, Nu1_N
+
 
 		
 
