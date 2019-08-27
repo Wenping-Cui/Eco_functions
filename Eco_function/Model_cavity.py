@@ -48,6 +48,7 @@ class Cavity_simulation(object):
 		self.energies = self.deltaE*np.ones(self.M)
 		if self.parameters.get('tau_inv')==None:
 			self.tau_inv = np.ones(self.M)
+			self.parameters['tau_inv']=np.ones(self.M)
 		else: 
 			self.tau_inv = self.parameters['tau_inv']*np.ones(self.M)
 		#################################
@@ -116,6 +117,7 @@ class Cavity_simulation(object):
 		phi_R_list_bar=[];
 		phi_N_list_bar=[];
 		Survive_list=[]
+		R_survive_list=[]
 		power=[];
 		N_survive_list=[];
 		Opti_f=[]
@@ -129,6 +131,7 @@ class Cavity_simulation(object):
 		lam_min_cor_array=[]
 		lam_min_ran_array=[]
 		Lam_array=[];
+		self.R_dominator=[]
 		self.sev = np.array([])
 		for step in range(self.sample_size):	
 			if Initial=='Auto':
@@ -155,30 +158,31 @@ class Cavity_simulation(object):
 				Model_costs_power=Model.costs_power
 			if Simulation_type=='CVXOPT' and  Dynamics=='quadratic':
 				R, N=self.Quadratic_programming(self,)
-				R[np.where(R < 10 ** -8)] = 0
-				N[np.where(N < 10 ** -4)] = 0
+				R[np.where(R < 10 ** -10)] = 0
+				N[np.where(N < 10 ** -10)] = 0
 				Model_costs_power=N.dot(self.costs)
 				Model_survive=np.count_nonzero(N)
 			if Simulation_type=='CVXOPT' and Dynamics=='linear':
 				self.Ks[np.where(self.Ks<0)]=0;
 				R, N,opt_v,fail=self.CVXOPT_programming(self.M, self.S, self.Ks, self.costs, self.C)
 				if fail==1: continue 
-				R[np.where(R < 10 ** -8)] = 0
-				N[np.where(N < 10 ** -4)] = 0
+				R[np.where(R < 10 ** -10)] = 0
+				N[np.where(N < 10 ** -5)] = 0
 				Model_costs_power=N.dot(self.costs)
 				Model_survive=np.count_nonzero(N)
 				Opti_f.append(opt_v)
 			if Simulation_type=='CVXOPT' and self.flag_crossfeeding:
 				R, N, fail=self.CVXOPT_crossfeeding(self.S, self.M, self.K, self.C, self.D, self.e, self.costs)
 				if fail==1: continue 
-				R[np.where(R < 10 ** -8)] = 0
-				N[np.where(N < 10 ** -4)] = 0
+				R[np.where(R < 10 ** -10)] = 0
+				N[np.where(N < 10 ** -5)] = 0
 				Model_costs_power=N.dot(self.costs)
 				Model_survive=np.count_nonzero(N)
 			if Dynamics=='quadratic':	
 				Opti_f.append((np.linalg.norm(self.Ks-R))**2/self.M)
 			self.R_f, self.N_f=R,N
 			Growth.extend(np.dot(self.C,R)-self.costs)
+			self.R_dominator.extend(np.dot(N,self.C)+self.tau_inv)
 			Survive_list.append(Model_survive)
 			phi_R_list.append(np.count_nonzero(R)/float(self.M));
 			phi_N_list.append(Model_survive/float(self.S));
@@ -216,6 +220,7 @@ class Cavity_simulation(object):
 			R=R[np.where(R>0)]
 			N=N[np.where(N>0)]
 			N_survive_list.extend(N)
+			R_survive_list.extend(R)
 			S=len(N);
 			M=len(R);
 			if Dynamics=='linear':
@@ -262,21 +267,28 @@ class Cavity_simulation(object):
 				Chi_array.append(chi);
 				Nu_array.append(nu);
 				self.sev = np.append(self.sev, ev)
-		self.packing=np.asarray(phi_N_list)/np.asarray(phi_R_list)
+		self.packing=np.asarray(phi_N_list)/(np.asarray(phi_R_list)+1e-8)
 		self.lamcs=Lamc_array
 		self.lam_min_cor_array=lam_min_cor_array
 		self.lams=Lam_array
 		self.lam_min_array=lam_min_array
 		self.mean_R, self.var_R=np.mean(R_list), np.var(R_list)
 		self.mean_N, self.var_N=np.mean(N_list), np.var(N_list)
+		self.mean_Grow, self.var_Grow=np.mean(Growth), np.var(Growth)
 		self.Survive=np.mean(Survive_list)
 		self.mean_var_simulation={};
 		self.mean_var_simulation['phi_R']=np.mean(phi_R_list)
 		self.mean_var_simulation['phi_N']=np.mean(phi_N_list)
 		self.mean_var_simulation['mean_R']=self.mean_R
 		self.mean_var_simulation['mean_N']=self.mean_N
+		self.mean_var_simulation['mean_R_s']=np.mean(R_survive_list)
+		self.mean_var_simulation['mean_N_s']=np.mean(N_survive_list)
+		self.mean_var_simulation['mean_Growth']=self.mean_Grow
 		self.mean_var_simulation['q_R']=self.var_R+self.mean_R**2
 		self.mean_var_simulation['q_N']=self.var_N+self.mean_N**2
+		self.mean_var_simulation['q_R_s']=np.var(R_survive_list)+np.mean(R_survive_list)**2
+		self.mean_var_simulation['q_N_s']=np.var(N_survive_list)+np.mean(N_survive_list)**2
+		self.mean_var_simulation['q_Growth']=self.var_Grow+self.mean_Grow**2
 		self.mean_var_simulation['Survive']=np.mean(Survive_list)
 		self.mean_var_simulation['Survive_bar']=np.std(Survive_list)
 		self.mean_var_simulation['phi_R_bar']=np.std(phi_R_list)
@@ -287,6 +299,8 @@ class Cavity_simulation(object):
 		self.mean_var_simulation['q_N_bar']=np.std(qN_list_bar)
 		self.mean_var_simulation['var_R']=self.var_R
 		self.mean_var_simulation['var_N']=self.var_N
+		self.mean_var_simulation['mean_Dominator']=np.mean(np.asarray(self.R_dominator))
+		self.mean_var_simulation['q_Dominator']=np.mean(np.asarray(self.R_dominator)**2)
 		self.mean_var_simulation['power']=np.mean(power)
 		self.mean_var_simulation['power_bar']=np.std(power)
 		self.mean_var_simulation['opti_f']=np.mean(Opti_f)
@@ -365,9 +379,9 @@ class Cavity_simulation(object):
 		h = matrix(h, tc="d")
 		# Construct the QP, invoke solver
 		solvers.options['show_progress'] = False
-		solvers.options['abstol']=1e-8
-		solvers.options['reltol']=1e-8
-		solvers.options['feastol']=1e-8
+		solvers.options['abstol']=1e-12
+		solvers.options['reltol']=1e-12
+		solvers.options['feastol']=1e-12
 		sol = solvers.qp(P,q,G,h)
 		# Extract optimal value and solution
 		R=np.array(sol['x'])
