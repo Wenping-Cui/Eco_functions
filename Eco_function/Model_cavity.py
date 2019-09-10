@@ -48,7 +48,7 @@ class Cavity_simulation(object):
 		self.energies = self.deltaE*np.ones(self.M)
 		if self.parameters.get('tau_inv')==None:
 			self.tau_inv = np.ones(self.M)
-			self.parameters['tau_inv']=np.ones(self.M)
+			self.parameters['tau_inv']=1
 		else: 
 			self.tau_inv = self.parameters['tau_inv']*np.ones(self.M)
 		#################################
@@ -131,6 +131,8 @@ class Cavity_simulation(object):
 		lam_min_cor_array=[]
 		lam_min_ran_array=[]
 		Lam_array=[];
+		self.R_org=[]
+		self.N_org=[]
 		self.R_dominator=[]
 		self.sev = np.array([])
 		for step in range(self.sample_size):	
@@ -158,6 +160,8 @@ class Cavity_simulation(object):
 				Model_costs_power=Model.costs_power
 			if Simulation_type=='CVXOPT' and  Dynamics=='quadratic':
 				R, N=self.Quadratic_programming(self,)
+				self.R_org.extend(R)
+				self.N_org.extend(N)
 				R[np.where(R < 10 ** -10)] = 0
 				N[np.where(N < 10 ** -10)] = 0
 				Model_costs_power=N.dot(self.costs)
@@ -166,6 +170,8 @@ class Cavity_simulation(object):
 				self.Ks[np.where(self.Ks<0)]=0;
 				R, N,opt_v,fail=self.CVXOPT_programming(self.M, self.S, self.Ks, self.costs, self.C)
 				if fail==1: continue 
+				self.R_org.extend(R)
+				self.N_org.extend(N)
 				R[np.where(R < 10 ** -10)] = 0
 				N[np.where(N < 10 ** -5)] = 0
 				Model_costs_power=N.dot(self.costs)
@@ -174,6 +180,8 @@ class Cavity_simulation(object):
 			if Simulation_type=='CVXOPT' and self.flag_crossfeeding:
 				R, N, fail=self.CVXOPT_crossfeeding(self.S, self.M, self.K, self.C, self.D, self.e, self.costs)
 				if fail==1: continue 
+				self.R_org.extend(R)
+				self.N_org.extend(N)
 				R[np.where(R < 10 ** -10)] = 0
 				N[np.where(N < 10 ** -5)] = 0
 				Model_costs_power=N.dot(self.costs)
