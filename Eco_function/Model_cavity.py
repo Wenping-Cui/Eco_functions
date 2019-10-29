@@ -60,10 +60,6 @@ class Cavity_simulation(object):
 		self.Nt = self.parameters['Nt']
 		self.T_par = [self.t0, self.t1, self.Nt];
 
-		if self.Metabolic_Tradeoff:
-			self.costs=np.sum(self.C, axis=1)+self.epsilon*np.random.normal(0, 1, self.S)
-		else:
-			self.costs=np.random.normal(self.cost, self.sigma_m, self.S)		#Ode solver parameter
 
 ########################################################################################################
 		###   Make the determined matrix
@@ -95,6 +91,12 @@ class Cavity_simulation(object):
 			self.C= B+np.random.normal(self.mu/self.S, self.epsilon/np.sqrt(self.S), [self.S,self.M])
 		elif self.C_type=='uniform':
 			self.C= B+np.random.uniform(0,self.epsilon, [self.S,self.M])
+
+		if self.Metabolic_Tradeoff:
+			self.costs=np.sum(self.C, axis=1)
+			self.costs=(1.+self.epsilon*np.random.normal(0, 1, self.S))*self.costs
+		else:
+			self.costs=np.random.normal(self.cost, self.sigma_m, self.S)		#Ode solver parameter
 		#shape, scale = 2., 2.  # mean=4, std=2*sqrt(2)
 		#self.C= np.random.gamma(shape, scale, [self.S,self.M])
 		self.R_ini=0.1*np.ones(self.M)
@@ -173,7 +175,7 @@ class Cavity_simulation(object):
 				self.R_org.extend(R)
 				self.N_org.extend(N)
 				R[np.where(R < 10 ** -10)] = 0
-				N[np.where(N < 10 ** -5)] = 0
+				N[np.where(N < 10 ** -2)] = 0
 				Model_costs_power=N.dot(self.costs)
 				Model_survive=np.count_nonzero(N)
 				Opti_f.append(opt_v)
@@ -316,6 +318,8 @@ class Cavity_simulation(object):
 		self.mean_var_simulation['lam_min']=np.mean(lam_min_array)
 		self.mean_var_simulation['lam_min_cor']=np.mean(lam_min_cor_array)
 		self.mean_var_simulation['lam_min_ran']=np.mean(lam_min_ran_array)
+		print('KL Divergence',KL_lams(Lam_array, self.sigma_c, self.mean_var_simulation['phi_N'],self.mean_var_simulation['phi_R'], self.M, Nbins=100))
+		self.mean_var_simulation['KL_div']=KL_lams(Lam_array, self.sigma_c, self.mean_var_simulation['phi_N'],self.mean_var_simulation['phi_R'], self.M, Nbins=100)
 		if Dynamics=='quadratic':
 			Nu_array=np.asarray(Nu_array)
 			self.mean_var_simulation['nu']=np.mean(Nu_array)

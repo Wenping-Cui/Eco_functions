@@ -26,3 +26,26 @@ def save_parameters(sim,filename):
  	with open(filename, 'wb') as f:
     		pickle.dump(sim, f)       
     		return 'File is saved' 	
+def KL_lams(lams, sigc, phiN,phiR, M, Nbins=100):
+	s=sigc*np.sqrt(M)
+	c=phiN/phiR
+	a=(s**2)*(1-np.sqrt(c))**2
+	b=(s**2)*(1+np.sqrt(c))**2
+	bins=np.linspace(a,b,Nbins)
+	p,bins =np.histogram(lams, bins=bins, density=True)
+	bins=np.linspace(a,b,Nbins-1)
+	q=MP_density(bins, a, b, c, s)
+	q=np.nan_to_num(q)
+	return KL(p,q)
+
+
+def MP_density(bins, a,b,c, s):
+	return (1./(2*np.pi*bins*c*s**2))*np.sqrt((b-bins)*(bins-a))
+
+def KL(P,Q,epsilon=1e-5):
+# Epsilon is used here to avoid conditional code for
+# checking that neither P nor Q is equal to 0. 
+    # You may want to instead make copies to avoid changing the np arrays.
+    P = P+epsilon
+    Q = Q+epsilon
+    return np.sum(P*np.log(P/Q))
