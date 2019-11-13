@@ -27,6 +27,7 @@ class Cavity_simulation(object):
 		self.sigma_m=parameters['sigma_m']
 		self.sample_size=parameters['sample_size']
 		self.Metabolic_Tradeoff=False
+		self.Metabolic_Tradeoff_type='null'
 		self.flag_crossfeeding=False
 		self.C_type='gaussian'
 		self.B_type='null'
@@ -36,6 +37,7 @@ class Cavity_simulation(object):
 		self.non_zero_resource=range(self.M)
 		self.p_c=0.2
 		self.epsilon=10**(-3)
+		self.epsilon_Metabolic=0
 		self.e=1.0
 	def initialize_random_variable(self,):
 		#################################
@@ -94,7 +96,12 @@ class Cavity_simulation(object):
 
 		if self.Metabolic_Tradeoff:
 			self.costs=np.sum(self.C, axis=1)
-			self.costs=(1.+self.epsilon*np.random.normal(0, 1))*self.costs
+			if self.Metabolic_Tradeoff_type=='scale':
+				self.costs=(1.+self.epsilon_Metabolic*np.random.normal(0, 1,self.S))*self.costs
+			elif self.Metabolic_Tradeoff_type=='add':
+				self.costs=self.epsilon_Metabolic*np.random.normal(0, 1,self.S)+self.costs
+			elif self.Metabolic_Tradeoff_type=='power':
+				self.costs=np.power(self.costs,1.+self.epsilon_Metabolic*np.random.normal(0, 1,self.S))
 		else:
 			self.costs=np.random.normal(self.cost, self.sigma_m, self.S)		#Ode solver parameter
 		#shape, scale = 2., 2.  # mean=4, std=2*sqrt(2)
@@ -133,6 +140,7 @@ class Cavity_simulation(object):
 		lam_min_cor_array=[]
 		lam_min_ran_array=[]
 		Lam_array=[];
+		Costs_metabolic=[]
 		self.R_org=[]
 		self.N_org=[]
 		self.R_dominator=[]
@@ -175,7 +183,7 @@ class Cavity_simulation(object):
 				self.R_org.extend(R)
 				self.N_org.extend(N)
 				R[np.where(R < 10 ** -10)] = 0
-				N[np.where(N < 10 ** -2)] = 0
+				N[np.where(N < 10 ** -3)] = 0
 				Model_costs_power=N.dot(self.costs)
 				Model_survive=np.count_nonzero(N)
 				Opti_f.append(opt_v)
@@ -203,6 +211,7 @@ class Cavity_simulation(object):
 			qR_list_bar.append(np.mean(R**2))
 			qN_list_bar.append(np.mean(N**2))
 			power.append(Model_costs_power)
+			Costs_metabolic.extend(self.costs)
 			C=self.C;
 			C=np.delete(C, np.where(R==0),axis=1)
 			C=np.delete(C, np.where(N==0),axis=0)
@@ -300,7 +309,7 @@ class Cavity_simulation(object):
 		self.mean_var_simulation['q_N_s']=np.var(N_survive_list)+np.mean(N_survive_list)**2
 		self.mean_var_simulation['q_Growth']=self.var_Grow+self.mean_Grow**2
 		self.mean_var_simulation['Survive']=np.mean(Survive_list)
-		self.mean_var_simulation['Survive_bar']=np.std(Survive_list)
+		self.mean_var_simulation['Survive_bar']=np.nanstd(Survive_list)
 		self.mean_var_simulation['phi_R_bar']=np.std(phi_R_list)
 		self.mean_var_simulation['phi_N_bar']=np.std(phi_N_list)
 		self.mean_var_simulation['mean_R_bar']=np.std(R_list_bar)
@@ -315,11 +324,11 @@ class Cavity_simulation(object):
 		self.mean_var_simulation['power_bar']=np.std(power)
 		self.mean_var_simulation['opti_f']=np.mean(Opti_f)
 		self.mean_var_simulation['opti_f_bar']=np.std(Opti_f)
+		self.mean_var_simulation['m_metabolic']=np.mean(Costs_metabolic)
+		self.mean_var_simulation['sigm_metabolic']=np.std(Costs_metabolic)
 		self.mean_var_simulation['lam_min']=np.mean(lam_min_array)
 		self.mean_var_simulation['lam_min_cor']=np.mean(lam_min_cor_array)
 		self.mean_var_simulation['lam_min_ran']=np.mean(lam_min_ran_array)
-		print('KL Divergence',KL_lams(Lam_array, self.sigma_c, self.mean_var_simulation['phi_N'],self.mean_var_simulation['phi_R'], self.M, Nbins=100))
-		self.mean_var_simulation['KL_div']=KL_lams(Lam_array, self.sigma_c, self.mean_var_simulation['phi_N'],self.mean_var_simulation['phi_R'], self.M, Nbins=100)
 		if Dynamics=='quadratic':
 			Nu_array=np.asarray(Nu_array)
 			self.mean_var_simulation['nu']=np.mean(Nu_array)
@@ -342,31 +351,8 @@ class Cavity_simulation(object):
 		self.N_List=N_list
 		self.R_List=R_list
 		self.G_List=Growth
-		if plot:
-			num_bins=100
-			plt.close('all')
-			f, (ax1, ax2, ax3) = plt.subplots(1, 3)
-	
 
-			n, bins, patches = ax1.hist(N_survive_list, num_bins, normed=1, facecolor='green', alpha=0.5)
-			ax1.set_xlabel('Surviving Species Abundance')
-			ax1.set_ylabel('Probability density')
-			ax1.set_title(r'Histogram of Species')
-
-			n, bins, patches = ax2.hist(R_list, num_bins, normed=1, facecolor='green', alpha=0.5)
-			ax2.set_xlabel('Resources Abundance')
-			ax2.set_ylabel('Probability density')
-			ax2.set_title(r'Histogram of Resources')
-
-
-			n, bins, patches = ax3.hist(Growth, num_bins, normed=1, facecolor='green', alpha=0.5)
-			ax3.set_xlabel('Growth Rate')
-			ax3.set_ylabel('Probability density')
-			ax3.set_title(r'Histogram of Growth Rates')
-			f.tight_layout()
-			return f
-		else:
-			return self.mean_var_simulation
+		return self.mean_var_simulation
 	
 	def Quadratic_programming(self, Initial='Auto'):
 		if Initial=='Auto':
@@ -406,6 +392,7 @@ class Cavity_simulation(object):
 
 	def CVXOPT_programming(self,M, S, K, costs, C):
 		failed=0
+		if not all(i >= 0 for i in costs): return np.zeros(S),np.zeros(M),0,1
 		# Define QP parameters (directly)
 		G1= C/self.parameters['tau_inv']
 		h1= costs
