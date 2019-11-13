@@ -94,7 +94,7 @@ class Cavity_simulation(object):
 
 		if self.Metabolic_Tradeoff:
 			self.costs=np.sum(self.C, axis=1)
-			self.costs=(1.+self.epsilon*np.random.normal(0, 1, self.S))*self.costs
+			self.costs=(1.+self.epsilon*np.random.normal(0, 1))*self.costs
 		else:
 			self.costs=np.random.normal(self.cost, self.sigma_m, self.S)		#Ode solver parameter
 		#shape, scale = 2., 2.  # mean=4, std=2*sqrt(2)
