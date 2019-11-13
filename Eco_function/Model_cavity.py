@@ -137,8 +137,8 @@ class Cavity_simulation(object):
 		Nu_array_test=[];
 		Lamc_array=[]
 		lam_min_array=[]
-		lam_min_cor_array=[]
-		lam_min_ran_array=[]
+	#	lam_min_cor_array=[]
+	#	lam_min_ran_array=[]
 		Lam_array=[];
 		Costs_metabolic=[]
 		self.R_org=[]
@@ -169,7 +169,8 @@ class Cavity_simulation(object):
 				Model_survive=Model.survive;
 				Model_costs_power=Model.costs_power
 			if Simulation_type=='CVXOPT' and  Dynamics=='quadratic':
-				R, N=self.Quadratic_programming(self,)
+				#R, N=self.Quadratic_programming(self,)
+				R, N,opt_v,fail=self.CVXOPT_qp(self.M, self.S, self.Ks, self.costs, self.C, self.tau_inv)
 				self.R_org.extend(R)
 				self.N_org.extend(N)
 				R[np.where(R < 10 ** -10)] = 0
@@ -216,26 +217,24 @@ class Cavity_simulation(object):
 			C=np.delete(C, np.where(R==0),axis=1)
 			C=np.delete(C, np.where(N==0),axis=0)
 			eigvs=np.real(LA.eigvals(np.dot(C,C.transpose())))
-			eigvs_cor=np.real(LA.eigvals(np.einsum('i,ij->ij', N[np.where(N>0)], np.dot(C,C.transpose()))))
-			N_bar=np.random.permutation(N[np.where(N>0)])
-			eigvs_ran=np.real(LA.eigvals(np.einsum('i,ij->ij', N_bar, np.dot(C,C.transpose()))))
+		#	eigvs_cor=np.real(LA.eigvals(np.einsum('i,ij->ij', N[np.where(N>0)], np.dot(C,C.transpose()))))
+		#	N_bar=np.random.permutation(N[np.where(N>0)])
+		#	eigvs_ran=np.real(LA.eigvals(np.einsum('i,ij->ij', N_bar, np.dot(C,C.transpose()))))
 			if len(eigvs)>1:
-				Lam_array.extend(eigvs_cor)
+				Lam_array.extend(eigvs)
 				lam_min=np.amin(eigvs)
 				lam_min_array.append(lam_min)
-			else:
-				lam_min_array.append(0)
-			if len(eigvs_cor)>1:
-				Lamc_array.extend(eigvs_cor)
-				lam_min_cor=np.amin(eigvs_cor)
-				lam_min_cor_array.append(lam_min_cor)
-			else:
-				lam_min_cor_array.append(0)
-			if len(eigvs_ran)>1:
-				lam_min_ran=np.amin(eigvs_ran)
-				lam_min_ran_array.append(lam_min_ran)
-			else:
-				lam_min_ran_array.append(0)
+		#	if len(eigvs_cor)>1:
+		#		Lamc_array.extend(eigvs_cor)
+		#		lam_min_cor=np.amin(eigvs_cor)
+		#		lam_min_cor_array.append(lam_min_cor)
+		#	else:
+		#		lam_min_cor_array.append(0)
+		#	if len(eigvs_ran)>1:
+		#		lam_min_ran=np.amin(eigvs_ran)
+		#		lam_min_ran_array.append(lam_min_ran)
+		#	else:
+		#		lam_min_ran_array.append(0)
 			R=R[np.where(R>0)]
 			N=N[np.where(N>0)]
 			N_survive_list.extend(N)
@@ -287,8 +286,8 @@ class Cavity_simulation(object):
 				Nu_array.append(nu);
 				self.sev = np.append(self.sev, ev)
 		self.packing=np.asarray(phi_N_list)/(np.asarray(phi_R_list)+1e-8)
-		self.lamcs=Lamc_array
-		self.lam_min_cor_array=lam_min_cor_array
+		#self.lamcs=Lamc_array
+		#self.lam_min_cor_array=lam_min_cor_array
 		self.lams=Lam_array
 		self.lam_min_array=lam_min_array
 		self.mean_R, self.var_R=np.mean(R_list), np.var(R_list)
@@ -327,20 +326,16 @@ class Cavity_simulation(object):
 		self.mean_var_simulation['m_metabolic']=np.mean(Costs_metabolic)
 		self.mean_var_simulation['sigm_metabolic']=np.std(Costs_metabolic)
 		self.mean_var_simulation['lam_min']=np.mean(lam_min_array)
-		self.mean_var_simulation['lam_min_cor']=np.mean(lam_min_cor_array)
-		self.mean_var_simulation['lam_min_ran']=np.mean(lam_min_ran_array)
-		if Dynamics=='quadratic':
+		self.mean_var_simulation['std_lam_min']=np.nanstd(lam_min_array)
+		#self.mean_var_simulation['lam_min_cor']=np.mean(lam_min_cor_array)
+		#self.mean_var_simulation['lam_min_ran']=np.mean(lam_min_ran_array)
+		if Dynamics=='quadratic' or Dynamics=='linear':
 			Nu_array=np.asarray(Nu_array)
 			self.mean_var_simulation['nu']=np.mean(Nu_array)
 			self.mean_var_simulation['nu_threshold']=np.mean(Nu_array[np.where((Nu_array>-10000) & (Nu_array<0))])
 			self.mean_var_simulation['chi']=np.mean(Chi_array)
-		elif Dynamics=='linear':
-			Nu_array=np.asarray(Nu_array)
-			self.mean_var_simulation['nu']=np.mean(Nu_array)
-			self.mean_var_simulation['nu_threshold']=np.mean(Nu_array[np.where((Nu_array>-10000) & (Nu_array<0))])
-			self.mean_var_simulation['chi']=np.mean(Chi_array)
-			self.mean_var_simulation['nu_test']=np.mean(Nu_array_test)
-			self.mean_var_simulation['chi_test']=np.mean(Chi_array_test)
+			self.mean_var_simulation['std_chi']=np.nanstd(Chi_array)
+			self.mean_var_simulation['std_nu_threshold']=np.nanstd(Nu_array[np.where((Nu_array>-10000) & (Nu_array<0))])
 		else:
 			self.mean_var_simulation['nu']='NaN'
 			self.mean_var_simulation['chi']='NaN'
@@ -351,7 +346,6 @@ class Cavity_simulation(object):
 		self.N_List=N_list
 		self.R_List=R_list
 		self.G_List=Growth
-
 		return self.mean_var_simulation
 	
 	def Quadratic_programming(self, Initial='Auto'):
@@ -389,6 +383,39 @@ class Cavity_simulation(object):
 		N=Na[0:self.S]
 		return R, N
 
+	def CVXOPT_qp(self,M, S, K, costs, C, tau):
+		failed=0
+		if not all(i >= 0 for i in costs): return np.zeros(S),np.zeros(M),0,1
+		# Define QP parameters (directly)
+		G1= C
+		h1= costs
+
+		G2= -np.identity(M)
+		h2= np.zeros(M)
+		G=np.concatenate((G1, G2), axis=0)
+		h=np.concatenate((h1, h2), axis=None)
+
+		R = cvx.Variable(shape=(M,1))
+		K = K.reshape((M,1))
+		h=h.reshape((M+S,1))
+
+		# Construct the QP, invoke solver
+		obj = cvx.Minimize((1/2)*cvx.quad_form(K-R,np.diag(1./tau)))
+		constraints =[G*R <= h]
+		prob = cvx.Problem(obj, constraints)
+		prob.solver_stats
+		try:
+			prob.solve(solver=cvx.ECOS,abstol=1e-12,reltol=1e-12,warm_start=True,verbose=False,max_iters=1000)
+		except:
+			N=np.zeros(S)
+			R=np.zeros(M)
+			return R, N, 0, 1
+		# Extract optimal value and solution
+		N=(constraints[0].dual_value)[0:S]
+		R=R.value/self.parameters['tau_inv']
+		R=R.reshape(M);
+		N=N.reshape(S);
+		return R, N, prob.value,failed
 
 	def CVXOPT_programming(self,M, S, K, costs, C):
 		failed=0
