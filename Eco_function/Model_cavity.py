@@ -129,6 +129,10 @@ class Cavity_simulation(object):
 		R_survive_list=[]
 		power=[];
 		N_survive_list=[];
+		N_survive_list_bar=[]
+		R_survive_list_bar=[]
+		qN_survive_list_bar=[]
+		qR_survive_list_bar=[]
 		Opti_f=[]
 		Growth=[]
 		Chi_array=[];
@@ -169,8 +173,8 @@ class Cavity_simulation(object):
 				Model_survive=Model.survive;
 				Model_costs_power=Model.costs_power
 			if Simulation_type=='CVXOPT' and  Dynamics=='quadratic':
-				#R, N=self.Quadratic_programming(self,)
-				R, N,opt_v,fail=self.CVXOPT_qp(self.M, self.S, self.Ks, self.costs, self.C, self.tau_inv)
+				R, N=self.Quadratic_programming(self,)
+				#R, N,opt_v,fail=self.CVXOPT_qp(self.M, self.S, self.Ks, self.costs, self.C, self.tau_inv)
 				self.R_org.extend(R)
 				self.N_org.extend(N)
 				R[np.where(R < 10 ** -10)] = 0
@@ -239,6 +243,10 @@ class Cavity_simulation(object):
 			N=N[np.where(N>0)]
 			N_survive_list.extend(N)
 			R_survive_list.extend(R)
+			N_survive_list_bar.append(np.mean(N))
+			R_survive_list_bar.append(np.mean(R))
+			qN_survive_list_bar.append(np.mean(N**2))
+			qR_survive_list_bar.append(np.mean(R**2))
 			S=len(N);
 			M=len(R);
 			if Dynamics=='linear':
@@ -301,7 +309,6 @@ class Cavity_simulation(object):
 		self.mean_var_simulation['mean_N']=self.mean_N
 		self.mean_var_simulation['mean_R_s']=np.mean(R_survive_list)
 		self.mean_var_simulation['mean_N_s']=np.mean(N_survive_list)
-		self.mean_var_simulation['mean_Growth']=self.mean_Grow
 		self.mean_var_simulation['q_R']=self.var_R+self.mean_R**2
 		self.mean_var_simulation['q_N']=self.var_N+self.mean_N**2
 		self.mean_var_simulation['q_R_s']=np.var(R_survive_list)+np.mean(R_survive_list)**2
@@ -309,14 +316,19 @@ class Cavity_simulation(object):
 		self.mean_var_simulation['q_Growth']=self.var_Grow+self.mean_Grow**2
 		self.mean_var_simulation['Survive']=np.mean(Survive_list)
 		self.mean_var_simulation['Survive_bar']=np.nanstd(Survive_list)
-		self.mean_var_simulation['phi_R_bar']=np.std(phi_R_list)
-		self.mean_var_simulation['phi_N_bar']=np.std(phi_N_list)
-		self.mean_var_simulation['mean_R_bar']=np.std(R_list_bar)
-		self.mean_var_simulation['mean_N_bar']=np.std(N_list_bar)
-		self.mean_var_simulation['q_R_bar']=np.std(qR_list_bar)
-		self.mean_var_simulation['q_N_bar']=np.std(qN_list_bar)
+		self.mean_var_simulation['phi_R_bar']=np.nanstd(phi_R_list)
+		self.mean_var_simulation['phi_N_bar']=np.nanstd(phi_N_list)
+		self.mean_var_simulation['mean_R_bar']=np.nanstd(R_list_bar)
+		self.mean_var_simulation['mean_N_bar']=np.nanstd(N_list_bar)
+		self.mean_var_simulation['mean_R_s_bar']=np.nanstd(R_survive_list_bar)
+		self.mean_var_simulation['mean_N_s_bar']=np.nanstd(N_survive_list_bar)
+		self.mean_var_simulation['q_R_bar']=np.nanstd(qR_list_bar)
+		self.mean_var_simulation['q_N_bar']=np.nanstd(qN_list_bar)
+		self.mean_var_simulation['q_R_s_bar']=np.nanstd(qR_survive_list_bar)
+		self.mean_var_simulation['q_N_s_bar']=np.nanstd(qN_survive_list_bar)
 		self.mean_var_simulation['var_R']=self.var_R
 		self.mean_var_simulation['var_N']=self.var_N
+		self.mean_var_simulation['mean_Growth']=self.mean_Grow
 		self.mean_var_simulation['mean_Dominator']=np.mean(np.asarray(self.R_dominator))
 		self.mean_var_simulation['q_Dominator']=np.mean(np.asarray(self.R_dominator)**2)
 		self.mean_var_simulation['power']=np.mean(power)
