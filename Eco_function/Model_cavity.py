@@ -141,6 +141,12 @@ class Cavity_simulation(object):
 		Nu_array_test=[];
 		Lamc_array=[]
 		lam_min_array=[]
+		self.col_lams=[]
+		self.col_C=[]
+		self.col_C_del=[]
+		self.col_R=[]
+		self.col_N=[]
+
 	#	lam_min_cor_array=[]
 	#	lam_min_ran_array=[]
 		Lam_array=[];
@@ -188,7 +194,7 @@ class Cavity_simulation(object):
 				self.R_org.extend(R)
 				self.N_org.extend(N)
 				R[np.where(R < 10 ** -10)] = 0
-				N[np.where(N < 10 ** -3)] = 0
+				N[np.where(N < 10 ** -4)] = 0
 				Model_costs_power=N.dot(self.costs)
 				Model_survive=np.count_nonzero(N)
 				Opti_f.append(opt_v)
@@ -198,7 +204,7 @@ class Cavity_simulation(object):
 				self.R_org.extend(R)
 				self.N_org.extend(N)
 				R[np.where(R < 10 ** -10)] = 0
-				N[np.where(N < 10 ** -5)] = 0
+				N[np.where(N < 10 ** -4)] = 0
 				Model_costs_power=N.dot(self.costs)
 				Model_survive=np.count_nonzero(N)
 			if Dynamics=='quadratic':	
@@ -211,16 +217,23 @@ class Cavity_simulation(object):
 			phi_N_list.append(Model_survive/float(self.S));
 			R_list.extend(R)
 			N_list.extend(N)
+			self.col_R.append(R)
+			self.col_N.append(N)
 			R_list_bar.append(np.mean(R))
 			N_list_bar.append(np.mean(N))
 			qR_list_bar.append(np.mean(R**2))
 			qN_list_bar.append(np.mean(N**2))
 			power.append(Model_costs_power)
 			Costs_metabolic.extend(self.costs)
-			C=self.C;
+			C=self.C.copy();
 			C=np.delete(C, np.where(R==0),axis=1)
 			C=np.delete(C, np.where(N==0),axis=0)
 			eigvs=np.real(LA.eigvals(np.dot(C,C.transpose())))
+			#if np.amin(eigvs)<1e-4 and len(eigvs)>1:
+			if len(eigvs)>1:
+				self.col_lams.append(eigvs)
+				self.col_C.append(self.C)
+				self.col_C_del.append(C)
 		#	eigvs_cor=np.real(LA.eigvals(np.einsum('i,ij->ij', N[np.where(N>0)], np.dot(C,C.transpose()))))
 		#	N_bar=np.random.permutation(N[np.where(N>0)])
 		#	eigvs_ran=np.real(LA.eigvals(np.einsum('i,ij->ij', N_bar, np.dot(C,C.transpose()))))
