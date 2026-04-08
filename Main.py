@@ -6,24 +6,12 @@ Created on Thu 03/31/2019
 """
 import time
 import pandas as pd
-import matplotlib
-from matplotlib import cm
-from matplotlib import colors
-import matplotlib.ticker as ticker
-import matplotlib.pyplot as plt
 import numpy as np
-import itertools
-from Eco_function.eco_lib import *
-from Eco_function.eco_plot import *
 from Eco_function.eco_func import *
 from Eco_function.Model_cavity_CRM import *
-from Eco_function.usertools import MakeMatrices
-import pdb
 import os.path
 import pickle
-from scipy.integrate import odeint
 from multiprocessing import Pool
-import multiprocessing 
 import argparse
 parser = argparse.ArgumentParser(description='Process types and dynamics')
 parser.add_argument('--B', default='identity')
@@ -60,6 +48,11 @@ parameters['t0']=0;
 parameters['t1']=500;
 parameters['Nt']=1000;
 filename='crossfeeding_D.pkl'
+if not os.path.isfile(filename):
+    raise FileNotFoundError(
+        f"Crossfeeding matrix file '{filename}' not found. "
+        "Generate it first or set dynamics != 'crossfeeding'."
+    )
 with open(filename, 'rb') as f:
     D = pickle.load(f)
 def func_parallel(para):

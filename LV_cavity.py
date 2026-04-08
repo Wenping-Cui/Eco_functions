@@ -6,24 +6,14 @@ Created on Thu 03/31/2019
 """
 import time
 import pandas as pd
-import pdb
-import matplotlib
-from matplotlib import cm
-from matplotlib import colors
-import matplotlib.ticker as ticker
-import matplotlib.pyplot as plt
 import numpy as np
-import itertools
 from Eco_function.eco_lib import *
 from Eco_function.Model_cavity_LV import *
-import pdb
+from Eco_function.C_matrix import circ, block
 import os.path
 import pickle
-from scipy.integrate import odeint
 from multiprocessing import Pool
-import multiprocessing 
 import argparse
-#pdb.set_trace()
 
 parser = argparse.ArgumentParser(description='Process types and dynamics')
 parser.add_argument('--A', default='gaussian')

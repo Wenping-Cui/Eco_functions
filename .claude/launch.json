@@ -1,0 +1,35 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "CRM Cavity Simulation",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["Main.py", "--d", "quadratic", "--C", "gaussian", "--B", "null", "--s", "CVXOPT"],
+      "port": null
+    },
+    {
+      "name": "LV Cavity Simulation",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["LV_cavity.py", "--A", "gaussian", "--B", "identity"],
+      "port": null
+    },
+    {
+      "name": "Test CRM (quick sanity check)",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["Test_CRM_cavity.py"],
+      "port": null
+    },
+    {
+      "name": "pytest (test suite)",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "pytest", "test/test_eco_functions.py", "-v"],
+      "port": null
+    },
+    {
+      "name": "Jupyter Lab (Examples)",
+      "runtimeExecutable": "jupyter",
+      "runtimeArgs": ["lab", "--notebook-dir=Examples"],
+      "port": 8888
+    }
+  ]
+}

@@ -1,8 +1,5 @@
 import time
 import pandas as pd
-import matplotlib
-import numpy as np
-import matplotlib.pyplot as plt
 import numpy as np
 from Eco_function.eco_lib import *
 from Eco_function.eco_func import *
@@ -10,13 +7,30 @@ from Eco_function.C_matrix import *
 from numpy import linalg as LA
 from scipy.integrate import odeint
 from scipy.integrate import quad
-import random as rand
 from cvxopt import matrix
 from cvxopt import solvers
 import cvxpy as cvx
 
 
 class CRM_Cavity_simulation(object):
+	"""Consumer-Resource Model (CRM) cavity-method simulation.
+
+	Runs ``sample_size`` independent realisations of a random consumer-resource
+	community and collects ensemble statistics.  Supports three resource dynamics:
+
+	- ``'linear'``      – renewable resources with linear (Type-I) uptake
+	- ``'quadratic'``   – non-renewable (logistic) resources
+	- ``'crossfeeding'``– metabolic byproduct recycling via matrix D
+
+	Solvers available via ``Simulation_type``:
+
+	- ``'ODE'``   – scipy odeint integration
+	- ``'CVXOPT'``– convex optimisation for the feasible equilibrium
+
+	Key attributes set after construction (before calling ``ode_simulation``):
+	    B_type, C_type, gamma_flag, Metabolic_Tradeoff, p_c, epsilon, e, D
+	"""
+
 	def __init__(self, parameters):
 		self.parameters=parameters
 		self.S=parameters['S']
@@ -41,7 +55,7 @@ class CRM_Cavity_simulation(object):
 		self.epsilon=10**(-3)
 		self.epsilon_Metabolic=0
 		self.e=1.0
-	def initialize_random_variable(self,Initial='Auto'):
+	def initialize_random_variable(self, Initial='Auto'):
 		#################################
 		# RESOURCE PROPERTIES
 		##################################
@@ -122,7 +136,26 @@ class CRM_Cavity_simulation(object):
 			self.sim_pars = [self.flag_crossfeeding, self.M, self.S, self.R_ini, self.N_ini, [self.t0, self.t1, self.Nt], self.C, self.energies, self.tau_inv,self.costs,self.growth, self.D, self.non_zero_resource,self.Ks]
 		return self.sim_pars
 
-	def ode_simulation(self,plot=False, Dynamics='linear', Initial='Auto', Simulation_type='CVXOPT'): 
+	def ode_simulation(self, plot=False, Dynamics='linear', Initial='Auto', Simulation_type='CVXOPT'):
+		"""Run ``sample_size`` realisations and return ensemble statistics.
+
+		Parameters
+		----------
+		Dynamics : str
+		    Resource dynamics: 'linear', 'quadratic', or 'crossfeeding'.
+		Simulation_type : str
+		    Solver: 'ODE' (scipy odeint) or 'CVXOPT' (convex optimisation).
+		Initial : str
+		    'Auto' samples new random matrices each step; 'Manually' uses
+		    the pre-assigned ``self.C_det``.
+
+		Returns
+		-------
+		dict
+		    Ensemble-averaged observables: phi_N, phi_R, mean/variance of N
+		    and R, survival count, power, linear-response coefficients chi/nu,
+		    and eigenvalue statistics of C C^T.
+		""" 
 		assert Simulation_type in ['ODE', 'CVXOPT'],"Check Simulation_type is 'CVXOPT' or 'ODE'"
 		phi_R_list=[];
 		phi_N_list=[];
@@ -156,8 +189,6 @@ class CRM_Cavity_simulation(object):
 		self.col_R=[]
 		self.col_N=[]
 
-	#	lam_min_cor_array=[]
-	#	lam_min_ran_array=[]
 		Lam_array=[];
 		Costs_metabolic=[]
 		self.R_org=[]
@@ -242,24 +273,10 @@ class CRM_Cavity_simulation(object):
 				self.col_lams.append(eigvs)
 				self.col_C.append(self.C)
 				self.col_C_del.append(C)
-		#	eigvs_cor=np.real(LA.eigvals(np.einsum('i,ij->ij', N[np.where(N>0)], np.dot(C,C.transpose()))))
-		#	N_bar=np.random.permutation(N[np.where(N>0)])
-		#	eigvs_ran=np.real(LA.eigvals(np.einsum('i,ij->ij', N_bar, np.dot(C,C.transpose()))))
 			if len(eigvs)>1:
 				Lam_array.extend(eigvs)
 				lam_min=np.amin(eigvs)
 				lam_min_array.append(lam_min)
-		#	if len(eigvs_cor)>1:
-		#		Lamc_array.extend(eigvs_cor)
-		#		lam_min_cor=np.amin(eigvs_cor)
-		#		lam_min_cor_array.append(lam_min_cor)
-		#	else:
-		#		lam_min_cor_array.append(0)
-		#	if len(eigvs_ran)>1:
-		#		lam_min_ran=np.amin(eigvs_ran)
-		#		lam_min_ran_array.append(lam_min_ran)
-		#	else:
-		#		lam_min_ran_array.append(0)
 			R=R[np.where(R>0)]
 			N=N[np.where(N>0)]
 			N_survive_list.extend(N)
@@ -315,8 +332,6 @@ class CRM_Cavity_simulation(object):
 				Nu_array.append(nu);
 				self.sev = np.append(self.sev, ev)
 		self.packing=np.asarray(phi_N_list)/(np.asarray(phi_R_list)+1e-8)
-		#self.lamcs=Lamc_array
-		#self.lam_min_cor_array=lam_min_cor_array
 		self.lams=Lam_array
 		self.lam_min_array=lam_min_array
 		self.mean_R, self.var_R=np.mean(R_list), np.var(R_list)
@@ -360,8 +375,6 @@ class CRM_Cavity_simulation(object):
 		self.mean_var_simulation['sigm_metabolic']=np.std(Costs_metabolic)
 		self.mean_var_simulation['lam_min']=np.mean(lam_min_array)
 		self.mean_var_simulation['std_lam_min']=np.nanstd(lam_min_array)
-		#self.mean_var_simulation['lam_min_cor']=np.mean(lam_min_cor_array)
-		#self.mean_var_simulation['lam_min_ran']=np.mean(lam_min_ran_array)
 		if Dynamics=='quadratic' or Dynamics=='linear':
 			Nu_array=np.asarray(Nu_array)
 			self.mean_var_simulation['nu']=np.mean(Nu_array)
@@ -431,7 +444,7 @@ class CRM_Cavity_simulation(object):
 
 		# Construct the QP, invoke solver
 		obj = cvx.Minimize((1/2)*cvx.quad_form(K-R,np.diag(1./tau)))
-		constraints =[G*R <= h]
+		constraints =[G@R <= h]
 		prob = cvx.Problem(obj, constraints)
 		prob.solver_stats
 		try:
@@ -465,7 +478,7 @@ class CRM_Cavity_simulation(object):
 
 		# Construct the QP, invoke solver
 		obj = cvx.Minimize(cvx.sum(cvx.kl_div(K+1e-10, R+ 1e-10)))
-		constraints =[G*R <= h]
+		constraints =[G@R <= h]
 		prob = cvx.Problem(obj, constraints)
 		prob.solver_stats
 		try:
@@ -511,7 +524,7 @@ class CRM_Cavity_simulation(object):
 
 	                #Solve
 	                obj = cvx.Minimize(cvx.sum(cvx.kl_div(wR0, wR)))
-	                constraints = [G*wR <= h, wR >= 0]
+	                constraints = [G@wR <= h, wR >= 0]
 	                prob = cvx.Problem(obj, constraints)
 	                prob.solver_stats
 	                prob.solve(solver=cvx.ECOS,abstol=0.1*tol,reltol=0.1*tol,warm_start=True,verbose=False,max_iters=200)

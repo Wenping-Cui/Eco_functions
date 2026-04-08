@@ -1,27 +1,8 @@
 import time
-import pandas as pd
-import matplotlib
-from matplotlib import cm
-from matplotlib import colors
-import matplotlib.ticker as ticker
-import matplotlib.pyplot as plt
 import numpy as np
-import itertools
-from Eco_function.eco_lib import *
-from Eco_function.eco_plot import *
-from Eco_function.eco_func import *
-from Eco_function.Model_cavity_CRM import *
-import pdb
-import os.path
-import pickle
-from scipy.integrate import odeint
-from multiprocessing import Pool
-import multiprocessing 
+from Eco_function.Model_cavity_CRM import CRM_Cavity_simulation
 start_time = time.time()
-dynamics='quadratic' #'quadratic' 'linear'
-#file_name='Data/sigc_Li.csv'
-columns=['mean_N', 'q_N','mean_R','q_R', 'survive','mu','sigc','m','sigm','K','sigK','S','M','gamma']
-para_df = pd.DataFrame(columns=columns)
+dynamics='quadratic'  # 'quadratic', 'linear', or 'crossfeeding'
 parameters = {}
 
 parameters['sample_size']=1;

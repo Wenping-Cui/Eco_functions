@@ -1,0 +1,81 @@
+{
+  "_comment": "Default parameters for CRM and LV cavity simulations. Edit these values to change simulation defaults.",
+
+  "simulation": {
+    "sample_size": 1000,
+    "loop_size": 50,
+    "Pool_num": 10,
+    "save_pkl": false
+  },
+
+  "community": {
+    "S": 100,
+    "M": 100
+  },
+
+  "resources": {
+    "K": 1.0,
+    "sigma_K": 0.1,
+    "tau_inv": 1.0,
+    "deltaE": 1.0
+  },
+
+  "consumption": {
+    "mu": 1.0,
+    "sigma_c": 2.0,
+    "epsilon": 1e-3,
+    "p_c": 0.2,
+    "gamma_flag": "S/M",
+    "C_type": "gaussian",
+    "B_type": "null",
+    "Bnormal": false
+  },
+
+  "species": {
+    "m": 0.1,
+    "sigma_m": 0.01,
+    "growth": 1.0
+  },
+
+  "ode": {
+    "t0": 0,
+    "t1": 500,
+    "Nt": 1000,
+    "mxstep": 5000,
+    "atol": 1e-6,
+    "extinction_threshold": 1e-6
+  },
+
+  "crossfeeding": {
+    "e": 0.6,
+    "D_file": "crossfeeding_D.pkl"
+  },
+
+  "lv": {
+    "k": 1.0,
+    "sigma_k": 0.1,
+    "g": 1.0,
+    "sigma_g": 0.0,
+    "sys_gamma": 0,
+    "epsilon": 0.1,
+    "mu": 0.0,
+    "ODE_Time": [0, 500, 2000],
+    "mapping_CR": false
+  },
+
+  "solver": {
+    "abstol": 1e-12,
+    "reltol": 1e-12,
+    "feastol": 1e-12,
+    "Simulation_type": "CVXOPT",
+    "dynamics": "quadratic"
+  },
+
+  "numerics": {
+    "extinction_threshold_N": 1e-4,
+    "extinction_threshold_R": 1e-10,
+    "D_matrix_threshold": 1e-5,
+    "R_ini": 0.1,
+    "N_ini": 0.1
+  }
+}

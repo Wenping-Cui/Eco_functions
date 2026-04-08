@@ -1,19 +1,27 @@
-import time
-import pandas as pd
-import matplotlib
-import numpy as np
-import matplotlib.pyplot as plt
 import numpy as np
 from Eco_function.eco_lib import *
 from Eco_function.C_matrix import *
 from numpy import linalg as LA
 from scipy.integrate import odeint
-from scipy.integrate import quad
-import random as rand
 from cvxopt import matrix
 from cvxopt import solvers
 import cvxpy as cvx
 class LV_Cavity_simulation(object):
+	"""Lotka-Volterra cavity-method simulation.
+
+	Samples ``sample_size`` random interaction matrices A (or builds them from
+	a consumer-resource mapping) and solves for steady-state species abundances
+	using either ODE integration or convex optimisation.
+
+	Key attributes (set before calling ``_simulation``):
+	    A_type    – interaction matrix distribution: 'gaussian', 'gamma',
+	                'binomial', 'uniform'
+	    B_type    – structured base matrix: 'identity', 'null', 'circulant',
+	                'block'
+	    sys_gamma – off-diagonal symmetry: 1 = symmetric, 0 = asymmetric
+	    mapping   – if True, map CRM parameters (C, K, costs) to LV
+	"""
+
 	def __init__(self, parameters):
 		self.S=parameters['S']
 		self.k=parameters['k']
